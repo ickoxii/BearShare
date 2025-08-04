@@ -9,8 +9,10 @@ You may use AI LLM tools to assist with the development of your project, includi
 
 Unless you get specific approval otherwise, your project **must** include some component deployed on a cloud hosting service. You can use AWS, GCP, Azure, etc. These services have free tiers, and you might consider looking into tiers specifically for students.
 
+**Graudate students enrolled in CSI-5321:** You have additional requirements. See the bottom of the README.
+
 ## Milestones
-- You must meet with Dr. Freeman within the first week to get your project idea approved
+- You must present your project idea to Dr. Freeman within the first week to get it approved
 - You must meet with Dr. Freeman within the first 3 weeks to give a status update and discuss roadblocks
 - See the course schedule spreadhseet for specific dates
 
@@ -64,3 +66,29 @@ Grading will be based on...
 - The contribution of each individual group member
 - Evidence of consistent work, as revealed during milestone meetings
 - The quality of the final presentation
+
+# 5321 Extra requirements
+
+(For graudate students enrolled in CSI-5321)
+
+Your project **must** have a research component to it. That is, you must set out to address an open research question using some networking concepts you've learned in this course. Subject to my approval, this project can be an extension of a project you're currently working on with your advisor.
+
+Along with your code repository and presentation, you must submit a 4+ page paper (plus biblography), in double-column paper using the [ACM LaTeX template](https://www.acm.org/publications/proceedings-template) under the `sigconf` document class. This paper should include a brief introduction, related work, a description of your approach, experimental results, and a conclusion. Your goal should be to have a paper of high enough quality that it can be easily extended for a full submission to a research conference.
+
+All other instructions for the project apply, including the above submission questions.
+
+## 5321 Research ideas
+
+- Investigate the efficacy of congestion control algorithms for QUIC. Design your own improvements for some application, and evaluate it.
+- Propose improvements to, or novel applications of, the Media Over QUIC protocol
+- Limitations of QUIC IP switching
+- Quality adaptation for lossy data streaming of something other than traditional video
+- Distributed databases, federation, or blockchain
+- Protocol security flaws
+- IoT, WiFi 8, or 6G
+- CDN performance (e.g., content steering)
+- Live video streaming with distributed super-resolution between server/client for higher quality and lower latency
+- Mesh networking
+- Machine learning for routing protocols
+
+--> These are just examples. I hope that you'll come up with a better idea to suit your own interests!
