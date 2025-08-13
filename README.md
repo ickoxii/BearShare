@@ -69,7 +69,7 @@ Grading will be based on...
 
 # 5321 Extra requirements
 
-(For graudate students enrolled in CSI-5321)
+(For graduate students enrolled in CSI-5321)
 
 Your project **must** have a research component to it. That is, you must set out to address an open research question using some networking concepts you've learned in this course. Subject to my approval, this project can be an extension of a project you're currently working on with your advisor.
 
