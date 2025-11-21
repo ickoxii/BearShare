@@ -1,0 +1,11 @@
+[package]
+name = "final_project_group6_f25"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
+tokio-tungstenite = "0.24"
+tungstenite = "0.24"
+futures-util = "0.3"
+anyhow = "1.0.100"
