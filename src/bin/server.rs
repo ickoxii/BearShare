@@ -8,6 +8,7 @@ use tokio::net::TcpListener;
 use tokio::sync::{mpsc, Mutex};
 use tokio_tungstenite::accept_async;
 use tokio_tungstenite::tungstenite::Message;
+use final_project_group6_f25::doc::{Document, Op};
 
 type Tx = mpsc::UnboundedSender<Message>;
 type Peers = Arc<Mutex<HashMap<usize, Tx>>>;
@@ -20,9 +21,12 @@ async fn main() -> anyhow::Result<()> {
     let peers: Peers = Arc::new(Mutex::new(HashMap::new()));
     let next_id = Arc::new(AtomicUsize::new(1));
 
+    let doc = Arc::new(Mutex::new(Document::new()));
+
     while let Ok((stream, _addr)) = listener.accept().await {
         let peers = peers.clone();
         let next_id = next_id.clone();
+        let doc = doc.clone();
 
         tokio::spawn(async move {
             let ws_stream = accept_async(stream)
@@ -51,13 +55,34 @@ async fn main() -> anyhow::Result<()> {
                 }
             });
 
+            {
+                let lock_doc = doc.lock().await;
+                let snapshot = lock_doc.text().to_string();
+                println!("[server] sending snapshot to client {my_id}: '{snapshot}'");
+                let _ = client_tx.send(Message::Text(format!("SNAPSHOT:{snapshot}")));
+            }
+
+
             // Reading from this socket and displaying broadcast messages
             while let Some(Ok(msg)) = ws_rx.next().await {
-                if msg.is_binary() {
+                if let Message::Binary(bytes) = msg {
+                    if let Ok(op) = Op::from_bytes(&bytes) {
+                        let mut lock_doc = doc.lock().await;
+                        match op {
+                            Op::Insert { pos, text } => {
+                                let _ = lock_doc.insert(pos, &text);
+                            }
+                            Op::Delete { pos, len} => {
+                                let _ = lock_doc.delete( pos, len );
+                            }
+                        }
+                        println!("[server] doc = {}", lock_doc.text());
+                    }
+
                     let guard = peers.lock().await;
                     for (id, tx) in guard.iter() {
-                        if *id != my_id { // So I don't echo to myself and see everything twice
-                            let _ = tx.send(msg.clone());
+                        if *id != my_id {
+                            let _ = tx.send(Message::Binary(bytes.clone()));
                         }
                     }
                 }

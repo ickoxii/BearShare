@@ -22,17 +22,27 @@ async fn main() -> anyhow::Result<()> {
     let doc_for_recv = doc.clone();
     let recv_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = ws_rx.next().await {
-            // Only handle binary messages
+
+            if let Message::Text(s) = &msg {
+                println!("[client] got text message: '{s}'");
+                if let Some(rest) = s.strip_prefix("SNAPSHOT:") {
+                    let mut d = doc_for_recv.lock().await;
+                    *d = Document::from_text(rest.to_string());
+                    println!("\n[init  ] doc = {}", d.text());
+                    print!("> ");
+                }
+
+                continue;
+            }
+            //Only handle binary messages
             let bytes = match msg {
                 Message::Binary(b) => b,
-                Message::Text(_) => continue,
                 Message::Ping(_) | Message::Pong(_) | Message::Close(_) => continue,
                 _ => continue,
             };
 
             if let Ok(op) = Op::from_bytes(&bytes) {
                 let mut d = doc_for_recv.lock().await;
-
 
                 match op {
                     Op::Insert { pos, text } => {
@@ -67,11 +77,19 @@ async fn main() -> anyhow::Result<()> {
 
             let op = Op::Insert { pos, text: text.to_string() };
 
-            {
+            let should_send = {
                 let mut d = doc.lock().await;
-                d.insert(pos, text)?;
-                println!("[local ] doc = {}", d.text());
-            }
+                match d.insert(pos, text) {
+                    Ok(()) => {
+                        println!("[local ] doc = {}", d.text());
+                        true
+                    }
+                    Err(e) => {
+                        println!("[error ] insert failed: {e}");
+                        false
+                    }
+                }
+            }; // lock released here
 
             ws_tx.send(Message::Binary(op.to_bytes())).await?;
         } else if cmd == "d" {
@@ -80,13 +98,23 @@ async fn main() -> anyhow::Result<()> {
 
             let op = Op::Delete { pos, len };
 
-            {
+            let should_send = {
                 let mut d = doc.lock().await;
-                d.delete(pos, len)?;
-                println!("[local ] doc = {}", d.text());
-            }
+                match d.delete(pos, len) {
+                    Ok(()) => {
+                        println!("[local ] doc = {}", d.text());
+                        true
+                    }
+                    Err(e) => {
+                        println!("[error ] delete failed: {e}");
+                        false
+                    }
+                }
+            };
 
-            ws_tx.send(Message::Binary(op.to_bytes())).await?;
+            if should_send {
+                ws_tx.send(Message::Binary(op.to_bytes())).await?;
+            }
         } else {
             println!("Unknown command");
         }
