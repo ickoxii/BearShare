@@ -72,7 +72,24 @@ async fn main() -> anyhow::Result<()> {
         let cmd = parts.next().unwrap_or("");
 
         if cmd == "i" {
-            let pos: usize = parts.next().unwrap_or("0").parse().unwrap_or(0);
+            let pos_str = match parts.next() {
+                Some(s) => s,
+                None => {
+                    println!("[error ] missing position");
+                    print!("> ");
+                    continue;
+                }
+            };
+
+            let pos: usize = match pos_str.parse() {
+                Ok(p) => p,
+                Err(_) => {
+                    println!("[error ] invalid position: '{pos_str}'");
+                    print!("> ");
+                    continue;
+                }
+            };
+
             let text = parts.next().unwrap_or("");
 
             let op = Op::Insert { pos, text: text.to_string() };
@@ -89,12 +106,49 @@ async fn main() -> anyhow::Result<()> {
                         false
                     }
                 }
-            }; // lock released here
+            };
 
-            ws_tx.send(Message::Binary(op.to_bytes())).await?;
+            if should_send {
+                ws_tx.send(Message::Binary(op.to_bytes())).await?;
+            }
+
         } else if cmd == "d" {
-            let pos: usize = parts.next().unwrap_or("0").parse().unwrap_or(0);
-            let len: usize = parts.next().unwrap_or("0").parse().unwrap_or(0);
+            let pos_str = match parts.next() {
+                Some(s) => s,
+                None => {
+                    println!("[error ] missing position");
+                    print!("> ");
+                    continue;
+                }
+            };
+
+            let len_str = match parts.next() {
+                Some(s) => s,
+                None => {
+                    println!("[error ] missing length");
+                    print!("> ");
+                    continue;
+                }
+            };
+
+            let pos: usize = match pos_str.parse() {
+                Ok(p) => p,
+                Err(_) => {
+                    println!("[error ] invalid position: '{pos_str}'");
+                    print!("> ");
+                    continue;
+                }
+            };
+
+            let len: usize = match len_str.parse() {
+                Ok(l) => l,
+                Err(_) => {
+                    println!("[error ] invalid length: '{len_str}'");
+                    print!("> ");
+                    continue;
+                }
+            };
+
 
             let op = Op::Delete { pos, len };
 

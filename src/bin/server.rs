@@ -13,6 +13,37 @@ use final_project_group6_f25::doc::{Document, Op};
 type Tx = mpsc::UnboundedSender<Message>;
 type Peers = Arc<Mutex<HashMap<usize, Tx>>>;
 
+//Metadata per operation for server
+#[derive(Debug, Clone)]
+struct OpMeta {
+    seq: u64,   // global sequence number
+    client_id: u64,
+    client_seq: u64,
+}
+
+#[derive(Debug, Clone)]
+struct LoggedOp {
+    op: Op,
+    meta: OpMeta,
+}
+
+#[derive(Debug)]
+struct ServerState {
+    doc: Document,
+    log: Vec<LoggedOp>,
+    next_seq: u64,
+}
+
+impl ServerState {
+    fn new() -> Self {
+        ServerState {
+            doc: Document::new(),
+            log: Vec::new(),
+            next_seq: 1,
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let listener = TcpListener::bind("127.0.0.1:9001").await?;
@@ -21,12 +52,12 @@ async fn main() -> anyhow::Result<()> {
     let peers: Peers = Arc::new(Mutex::new(HashMap::new()));
     let next_id = Arc::new(AtomicUsize::new(1));
 
-    let doc = Arc::new(Mutex::new(Document::new()));
+    let state = Arc::new(Mutex::new(ServerState::new()));
 
     while let Ok((stream, _addr)) = listener.accept().await {
         let peers = peers.clone();
         let next_id = next_id.clone();
-        let doc = doc.clone();
+        let state = state.clone();
 
         tokio::spawn(async move {
             let ws_stream = accept_async(stream)
@@ -56,34 +87,91 @@ async fn main() -> anyhow::Result<()> {
             });
 
             {
-                let lock_doc = doc.lock().await;
-                let snapshot = lock_doc.text().to_string();
+                let st = state.lock().await;
+                let snapshot = st.doc.text().to_string();
                 println!("[server] sending snapshot to client {my_id}: '{snapshot}'");
                 let _ = client_tx.send(Message::Text(format!("SNAPSHOT:{snapshot}")));
             }
 
 
             // Reading from this socket and displaying broadcast messages
-            while let Some(Ok(msg)) = ws_rx.next().await {
-                if let Message::Binary(bytes) = msg {
-                    if let Ok(op) = Op::from_bytes(&bytes) {
-                        let mut lock_doc = doc.lock().await;
-                        match op {
-                            Op::Insert { pos, text } => {
-                                let _ = lock_doc.insert(pos, &text);
+            while let Some(msg_result) = ws_rx.next().await {
+                match msg_result {
+                    Ok(Message::Binary(bytes)) => {
+                        println!(
+                            "[server] received a binary message from client {my_id}, len={}",
+                            bytes.len()
+                        );
+
+                        let mut should_send = false;
+
+                        match Op::from_bytes(&bytes) {
+                            Ok(op) => {
+                                let mut st = state.lock().await;
+
+                                let seq = st.next_seq;
+                                st.next_seq += 1;
+
+                                let result = match &op {
+                                    Op::Insert { pos, text } => st.doc.insert(*pos, text),
+                                    Op::Delete { pos, len } => st.doc.delete(*pos, *len),
+                                };
+
+                                match result {
+                                    Ok(()) => {
+                                        println!(
+                                            "[server] seq={} from client={} doc = {}",
+                                            seq,
+                                            my_id,
+                                            st.doc.text()
+                                        );
+
+                                        st.log.push(LoggedOp {
+                                            op: op.clone(),
+                                            meta: OpMeta {
+                                                seq,
+                                                client_id: my_id as u64,
+                                                client_seq: 0,
+                                            },
+                                        });
+
+                                        should_send = true;
+                                    }
+                                    Err(e) => {
+                                        eprintln!("[server] op error from client {my_id}: {e}");
+                                        let _ = client_tx.send(Message::Text(format!("ERROR:{e}")));
+                                    }
+                                }
+
+                                if should_send {
+                                    let guard = peers.lock().await;
+                                    for (id, tx) in guard.iter() {
+                                        if *id != my_id {
+                                            let _ = tx.send(Message::Binary(bytes.clone()));
+                                        }
+                                    }
+                                }
                             }
-                            Op::Delete { pos, len} => {
-                                let _ = lock_doc.delete( pos, len );
+                            Err(e) => {
+                                eprintln!(
+                                    "[server] failed to decode op from client {my_id}: {e}"
+                                );
+                                let _ = client_tx.send(Message::Text(format!(
+                                    "ERROR:could not decode op: {e}"
+                                )));
                             }
                         }
-                        println!("[server] doc = {}", lock_doc.text());
                     }
 
-                    let guard = peers.lock().await;
-                    for (id, tx) in guard.iter() {
-                        if *id != my_id {
-                            let _ = tx.send(Message::Binary(bytes.clone()));
+                    Ok(other) => {
+                        if let Message::Close(_) = other {
+                            println!("Client {my_id} sent close frame");
+                            break;
                         }
+                    }
+                    Err(e) => {
+                        eprintln!("WebSocket error from client {my_id}: {e}");
+                        break;
                     }
                 }
             }
