@@ -1,0 +1,29 @@
+[package]
+name = "server"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+anyhow = "1.0.100"
+argon2 = { version = "0.5.3", features = ["std"] }
+axum = { version = "0.8.7", features = ["ws"] }
+chrono = { version = "0.4.42", features = ["serde"] }
+futures-util = "0.3.31"
+rga = { path = '../rga/' }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+sqlx = { version = "0.8.6", features = ["any", "runtime-tokio-native-tls", "mysql", "runtime-tokio"] }
+thiserror = "2.0.17"
+tokio = { version = "1.48.0", features = ["full"] }
+tower = "0.5.2"
+tower-http = { version = "0.6.8", features = ["cors", "trace"] }
+tracing = "0.1.43"
+tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+uuid = { version = "1.19.0", features = ["serde", "v4"] }
+
+[dev-dependencies]
+tempfile = "3.23.0"
+tokio-test = "0.4.4"
+
+[profile.release]
+features = "prod"
