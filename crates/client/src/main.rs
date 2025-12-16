@@ -1,9 +1,12 @@
 // Collaborative Editor Client
 // Connects to the server via WebSocket and enables real-time document editing
 
+mod secure_channel;
+
 use anyhow::{Context, Result};
 use futures_util::{SinkExt, StreamExt};
 use rga::RemoteOp;
+use secure_channel::{client_handshake, SecureRead, SecureWrite};
 use serde::{Deserialize, Serialize};
 use std::io::{self, Write};
 use std::sync::Arc;
@@ -154,10 +157,7 @@ pub struct ActivityEvent {
     pub details: Option<String>,
 }
 
-// ============================================================================
-// Client State (simplified - server is source of truth)
-// ============================================================================
-
+// Client State
 /// Client state for collaborative editing
 #[derive(Debug, Clone)]
 struct ClientState {
@@ -204,12 +204,9 @@ impl ClientState {
 
     /// Apply a remote operation to update local view
     fn apply_remote_op(&mut self, op: &RemoteOp<char>) {
-        // For display purposes, we request sync after remote ops
-        // The server is the source of truth
         match op {
             RemoteOp::Insert { value, .. } => {
                 // We can't know the exact position without the full CRDT state
-                // Just note that an insert happened
                 println!("[remote] Insert: '{}'", value);
             }
             RemoteOp::Delete { .. } => {
@@ -222,10 +219,7 @@ impl ClientState {
     }
 }
 
-// ============================================================================
 // Main Application
-// ============================================================================
-
 #[tokio::main]
 async fn main() -> Result<()> {
     // Get server URL from env or use default
@@ -244,9 +238,20 @@ async fn main() -> Result<()> {
         .context("Failed to connect to server")?;
 
     println!("✓ Connected to server!");
-    println!();
 
     let (mut ws_tx, mut ws_rx) = ws_stream.split();
+
+    // Perform secure channel handshake
+    println!("  Performing secure handshake...");
+    let (secure_write, secure_read) = client_handshake(&mut ws_tx, &mut ws_rx)
+        .await
+        .context("Secure handshake failed")?;
+    println!("✓ Secure channel established!");
+    println!();
+
+    // Wrap secure channel in Arc<Mutex> for sharing
+    let secure_write = Arc::new(Mutex::new(secure_write));
+    let secure_read = Arc::new(Mutex::new(secure_read));
 
     // Shared state
     let state = Arc::new(Mutex::new(ClientState::new()));
@@ -254,27 +259,53 @@ async fn main() -> Result<()> {
     // Channel for sending messages to WebSocket
     let (msg_tx, mut msg_rx) = mpsc::unbounded_channel::<ClientMessage>();
 
-    // Spawn task to send messages to server
+    // Spawn task to send encrypted messages to server
+    let secure_write_clone = secure_write.clone();
     let send_task = tokio::spawn(async move {
         while let Some(msg) = msg_rx.recv().await {
             let json = serde_json::to_string(&msg).expect("Failed to serialize message");
-            if ws_tx.send(Message::Text(json.into())).await.is_err() {
-                break;
+            let mut writer = secure_write_clone.lock().await;
+            match writer.encrypt(json.as_bytes()) {
+                Ok(encrypted) => {
+                    if ws_tx.send(Message::Binary(encrypted.into())).await.is_err() {
+                        break;
+                    }
+                }
+                Err(e) => {
+                    eprintln!("[error] Encryption failed: {}", e);
+                    break;
+                }
             }
         }
     });
 
-    // Spawn task to receive messages from server
+    // Spawn task to receive and decrypt messages from server
     let state_for_recv = state.clone();
+    let secure_read_clone = secure_read.clone();
     let recv_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = ws_rx.next().await {
-            if let Message::Text(text) = msg {
-                match serde_json::from_str::<ServerMessage>(&text) {
-                    Ok(server_msg) => {
-                        handle_server_message(&state_for_recv, server_msg).await;
+            if let Message::Binary(data) = msg {
+                let mut reader = secure_read_clone.lock().await;
+                match reader.decrypt(&data) {
+                    Ok(plaintext) => {
+                        match String::from_utf8(plaintext) {
+                            Ok(text) => {
+                                match serde_json::from_str::<ServerMessage>(&text) {
+                                    Ok(server_msg) => {
+                                        handle_server_message(&state_for_recv, server_msg).await;
+                                    }
+                                    Err(e) => {
+                                        println!("[error] Failed to parse server message: {}", e);
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                println!("[error] Invalid UTF-8 in message: {}", e);
+                            }
+                        }
                     }
                     Err(e) => {
-                        println!("[error] Failed to parse server message: {}", e);
+                        println!("[error] Decryption failed: {}", e);
                     }
                 }
             }
@@ -450,10 +481,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-// ============================================================================
 // Command Handlers
-// ============================================================================
-
 fn print_help() {
     println!("┌─────────────────────────────────────────────────────────────┐");
     println!("│                      Available Commands                     │");
@@ -603,10 +631,7 @@ async fn handle_delete_command(
     Ok(())
 }
 
-// ============================================================================
 // Server Message Handler
-// ============================================================================
-
 async fn handle_server_message(state: &Arc<Mutex<ClientState>>, msg: ServerMessage) {
     match msg {
         ServerMessage::RoomCreated {
