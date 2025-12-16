@@ -221,7 +221,7 @@ impl ServerState {
     }
 }
 
-// Handle WebSocket upgrade
+// Handle WebSocket upgrade (encrypted)
 pub async fn websocket_handler(State(state): State<ServerState>, ws: WebSocketUpgrade) -> Response {
     ws.on_upgrade(|socket| handle_socket(socket, state))
 }
