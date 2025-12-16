@@ -2,3 +2,12 @@
 name = "client"
 version.workspace = true
 edition.workspace = true
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
+tokio-tungstenite = "0.24"
+tungstenite = "0.24"
+futures-util = "0.3"
+anyhow = "1.0.100"
+protocol = { path = "../protocol" }
+rga = { path = "../rga" }

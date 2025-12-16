@@ -3,7 +3,6 @@
 use crate::database::Database;
 use crate::document::Document;
 use crate::file_store::{FileStore, StoredDocument};
-use crate::messages::{ClientMessage, ServerMessage};
 use crate::room::{Room, SharedRoom};
 use anyhow::{anyhow, Context, Result};
 use axum::{
@@ -16,6 +15,7 @@ use axum::{
     Router,
 };
 use futures_util::{SinkExt, StreamExt}; // For split() and next()
+use protocol::messages::{ClientMessage, ServerMessage};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -369,6 +369,8 @@ async fn handle_client_message(
         }
 
         ClientMessage::Operation { op } => {
+            tracing::info!("Received operation: {:?}", op);
+
             if let Some(room_id) = current_room.as_ref() {
                 let room = state
                     .get_room(room_id)

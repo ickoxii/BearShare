@@ -20,10 +20,8 @@ tower-http = { version = "0.6.8", features = ["cors", "trace"] }
 tracing = "0.1.43"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 uuid = { version = "1.19.0", features = ["serde", "v4"] }
+protocol = { path = "../protocol" }
 
 [dev-dependencies]
 tempfile = "3.23.0"
 tokio-test = "0.4.4"
-
-[profile.release]
-features = "prod"
