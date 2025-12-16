@@ -438,6 +438,54 @@ async fn handle_client_message(
         ClientMessage::Ping => {
             tx.send(ServerMessage::Pong)?;
         }
+
+        // ---- New handlers (placeholders) ----
+        ClientMessage::SaveVersion { doc_id, content, author } => {
+            // TODO: call into file_store / db to save a version.
+            // Placeholder acknowledgement; replace with actual persistence.
+            let msg = format!("SaveVersion received for doc {}", doc_id);
+            tracing::info!("{}", msg);
+            tx.send(ServerMessage::Ack { message: msg })?;
+        }
+
+        ClientMessage::ListVersions { doc_id } => {
+            // TODO: query file_store or db for versions list.
+            // Placeholder: empty list response.
+            tracing::info!("ListVersions requested for doc {}", doc_id);
+            tx.send(ServerMessage::VersionsList {
+                doc_id,
+                versions: vec![],
+            })?;
+        }
+
+        ClientMessage::RestoreVersion { doc_id, seq } => {
+            // TODO: perform restore and return the restored content.
+            tracing::info!("RestoreVersion requested for doc {} seq {}", doc_id, seq);
+            tx.send(ServerMessage::VersionRestored {
+                doc_id,
+                seq,
+                content: String::new(), // replace with actual restored content
+            })?;
+        }
+
+        ClientMessage::CompareVersions { doc_id, a_seq, b_seq } => {
+            // TODO: compute diff between versions a_seq and b_seq.
+            tracing::info!(
+                "CompareVersions requested for doc {} between {} and {}",
+                doc_id,
+                a_seq,
+                b_seq
+            );
+            tx.send(ServerMessage::VersionDiff {
+                diff: format!("No diff computed for {}:{} vs {}:{}", doc_id, a_seq, doc_id, b_seq),
+            })?;
+        }
+
+        ClientMessage::ListActivity { limit: _ } => {
+            // TODO: query recent activity from db.
+            tracing::info!("ListActivity requested");
+            tx.send(ServerMessage::ActivityList { events: vec![] })?;
+        }
     }
 
     Ok(())

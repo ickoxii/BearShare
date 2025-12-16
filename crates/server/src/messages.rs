@@ -30,6 +30,37 @@ pub enum ClientMessage {
 
     /// Heartbeat/ping
     Ping,
+
+    /// Explicitly save a document version (manual or autosave trigger)
+    SaveVersion {
+        doc_id: String,
+        content: String,
+        author: Option<String>,
+    },
+
+    /// List saved versions for a document
+    ListVersions {
+        doc_id: String,
+    },
+
+    /// Restore a specific version
+    RestoreVersion {
+        doc_id: String,
+        seq: u64,
+    },
+
+    /// Compare two versions
+    CompareVersions {
+        doc_id: String,
+        a_seq: u64,
+        b_seq: u64,
+    },
+
+    /// Request recent activity events
+    ListActivity {
+        limit: Option<usize>,
+    },
+
 }
 
 /// Messages sent from server to client
@@ -83,6 +114,40 @@ pub enum ServerMessage {
 
     /// Pong response to ping
     Pong,
+
+    /// Acknowledgement (used by autosave / retries)
+    Ack {
+        message: String,
+    },
+
+    /// Versions list response
+    VersionsList {
+        doc_id: String,
+        versions: Vec<String>, // Display-friendly (via Version::Display)
+    },
+
+    /// Version comparison output
+    VersionDiff {
+        diff: String,
+    },
+
+    /// Version restore result
+    VersionRestored {
+        doc_id: String,
+        seq: u64,
+        content: String,
+    },
+
+    /// Activity feed response
+    ActivityList {
+        events: Vec<String>,
+    },
+
+    /// Live activity event (optional push)
+    ActivityEvent {
+        event: String,
+    },
+
 }
 
 /// Internal message for server-side communication between tasks
