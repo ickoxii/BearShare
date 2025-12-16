@@ -3,7 +3,7 @@ name: Build & Deploy
 on:
   push:
     branches:
-      - ickoxii/crdt
+      - main
 
 jobs:
   build-and-deploy:
