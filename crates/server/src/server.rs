@@ -20,9 +20,10 @@ use futures_util::{SinkExt, StreamExt}; // For split() and next()
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{mpsc, RwLock, Mutex};
 use tower_http::cors::{Any, CorsLayer};
 use uuid::Uuid;
+use crate::secure_channel;
 
 /// Server state shared across connections
 #[derive(Clone)]
@@ -233,48 +234,88 @@ async fn handle_socket(socket: WebSocket, state: ServerState) {
     let (mut sender, mut receiver) = socket.split();
     let (tx, mut rx) = mpsc::unbounded_channel::<ServerMessage>();
 
-    // Spawn task to send messages to client
+    // Handshake first (plaintext)
+    // After this there will be encrypted binary only.
+    let sr = match secure_channel::server_handshake(&mut sender, &mut receiver).await {
+        Ok(pair) => pair, // (SecureWrite, SecureRead)
+        Err(e) => {
+            tracing::warn!("Handshake failed for {}: {}", client_id, e);
+            return;
+        }
+    };
+
+    // Shared secure state (write half in .0, read half in .1)
+    let sc = Arc::new(Mutex::new(sr));
+
+    // SEND TASK: ServerMessage -> JSON bytes -> encrypt -> Binary frame
+    let sc_for_send = sc.clone();
     let send_task = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
-            let json = match serde_json::to_string(&msg) {
-                Ok(j) => j,
+            let plaintext = match serde_json::to_vec(&msg) {
+                Ok(b) => b,
                 Err(e) => {
-                    tracing::error!("Failed to serialize message: {}", e);
+                    tracing::error!("Failed to serialize ServerMessage: {}", e);
                     continue;
                 }
             };
 
-            if sender.send(Message::Text(json.into())).await.is_err() {
+            // Using the write half
+            let ciphertext: Vec<u8> = {
+                let mut guard = sc_for_send.lock().await;
+
+                match guard.0.encrypt(&plaintext) {
+                    Ok(ct) => ct,
+                    Err(e) => {
+                        tracing::error!("Encrypt failed (closing connection): {}", e);
+                        return;
+                    }
+                }
+            };
+
+            if sender.send(Message::Binary(ciphertext.into())).await.is_err() {
                 break;
             }
         }
     });
 
-    // Track current room
     let mut current_room: Option<String> = None;
 
-    // Handle incoming messages
+    // Receiving loop
     while let Some(Ok(msg)) = receiver.next().await {
-        if let Message::Text(text) = msg {
-            match serde_json::from_str::<ClientMessage>(&text) {
-                Ok(client_msg) => {
-                    if let Err(e) =
-                        handle_client_message(&state, client_id, &tx, client_msg, &mut current_room)
-                            .await
-                    {
-                        tracing::error!("Error handling message: {}", e);
+        match msg {
+            Message::Binary(ct) => {
+                // Using the read half now
+                let plaintext: Vec<u8> = {
+                    let mut guard = sc.lock().await;
+
+                    match guard.1.decrypt(ct.as_ref()) {
+                        Ok(pt) => pt.to_vec(),
+                        Err(e) => {
+                            tracing::warn!("Decrypt failed (closing connection): {}", e);
+                            break;
+                        }
+                    }
+                };
+
+                match serde_json::from_slice::<ClientMessage>(&plaintext) {
+                    Ok(client_msg) => {
+                        if let Err(e) =
+                            handle_client_message(&state, client_id, &tx, client_msg, &mut current_room).await
+                        {
+                            tracing::error!("Error handling message: {}", e);
+                            let _ = tx.send(ServerMessage::Error { message: e.to_string() });
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to parse decrypted ClientMessage: {}", e);
                         let _ = tx.send(ServerMessage::Error {
-                            message: e.to_string(),
+                            message: format!("Invalid message format: {}", e),
                         });
                     }
                 }
-                Err(e) => {
-                    tracing::error!("Failed to parse message: {}", e);
-                    let _ = tx.send(ServerMessage::Error {
-                        message: format!("Invalid message format: {}", e),
-                    });
-                }
             }
+            Message::Close(_) => break,
+            _ => {} // Ignore non-binary stuff after handshake
         }
     }
 
@@ -290,6 +331,8 @@ async fn handle_socket(socket: WebSocket, state: ServerState) {
     send_task.abort();
     tracing::info!("WebSocket connection closed: {}", client_id);
 }
+
+
 
 /// Handle a client message
 async fn handle_client_message(
