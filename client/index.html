@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>RGA WebSocket Client</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 1000px; margin: 24px auto; padding: 0 12px; }
+    fieldset { margin: 12px 0; padding: 12px; }
+    label { display:block; margin: 6px 0; }
+    input, textarea, button { font: inherit; }
+    input { width: 100%; padding: 6px; }
+    textarea { width: 100%; min-height: 240px; padding: 8px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .status { padding: 8px; background: #f4f4f4; border-radius: 6px; }
+    .log { white-space: pre-wrap; background: #111; color: #ddd; padding: 10px; border-radius: 6px; min-height: 120px; }
+    .btns { display:flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h1>Collaborative Editor (RGA)</h1>
+
+  <div class="status">
+    <div><b>WebSocket:</b> <span id="wsStatus">disconnected</span></div>
+    <div><b>Room:</b> <span id="roomStatus">none</span></div>
+    <div><b>Site:</b> <span id="siteStatus">n/a</span></div>
+  </div>
+
+  <fieldset>
+    <legend>Connection</legend>
+    <label>
+      WebSocket URL
+      <input id="wsUrl" value="ws://34.135.102.212:9001/ws" />
+    </label>
+    <div class="btns">
+      <button id="btnConnect">Connect</button>
+      <button id="btnDisconnect">Disconnect</button>
+    </div>
+  </fieldset>
+
+  <div class="row">
+    <fieldset>
+      <legend>Create Room</legend>
+      <label>Room name <input id="createRoomName" placeholder="My Room" /></label>
+      <label>Password <input id="createPassword" placeholder="password" /></label>
+      <label>Filename <input id="createFilename" placeholder="doc.txt" /></label>
+      <label>Initial content <input id="createInitial" placeholder="Hello world" /></label>
+      <div class="btns">
+        <button id="btnCreateRoom">CreateRoom</button>
+      </div>
+      <small>After create, the server replies <code>RoomCreated</code>. This client will auto-<code>RequestSync</code>.</small>
+    </fieldset>
+
+    <fieldset>
+      <legend>Join / Leave</legend>
+      <label>Room ID <input id="joinRoomId" placeholder="uuid..." /></label>
+      <label>Password <input id="joinPassword" placeholder="password" /></label>
+      <div class="btns">
+        <button id="btnJoinRoom">JoinRoom</button>
+        <button id="btnLeaveRoom">LeaveRoom</button>
+        <button id="btnSync">RequestSync</button>
+      </div>
+    </fieldset>
+  </div>
+
+  <fieldset>
+    <legend>Editor</legend>
+    <textarea id="editor" placeholder="Join a room to edit..." disabled></textarea>
+    <div class="btns">
+      <button id="btnClearLog">Clear Log</button>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Log</legend>
+    <div id="log" class="log"></div>
+  </fieldset>
+
+  <script src="./rga.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
