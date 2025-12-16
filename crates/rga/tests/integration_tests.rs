@@ -5,7 +5,7 @@
 mod integration_tests {
     use rga::{RemoteOp, Rga, S4Vector};
 
-    /// Helper to simulate a network of sites
+    // Helper to simulate a network of sites
     struct Network {
         sites: Vec<Rga<char>>,
         pending_ops: Vec<(usize, RemoteOp<char>)>, // (from_site, op)

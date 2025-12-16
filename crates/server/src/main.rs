@@ -2,16 +2,27 @@
 
 mod database;
 mod document;
+mod features;
 mod file_store;
 mod room;
 mod server;
+mod secure_channel;
 
 use anyhow::Result;
 use std::net::SocketAddr;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+
+#[cfg(not(feature = "prod"))]
+const IP: &str = "127.0.0.1:9001";
+
+#[cfg(feature = "prod")]
+const IP: &str = "34.135.102.212:9001";
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    println!("ip: {}", IP);
+
     // Initialize tracing
     tracing_subscriber::registry()
         .with(

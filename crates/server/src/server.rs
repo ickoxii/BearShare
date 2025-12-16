@@ -2,6 +2,7 @@
 
 use crate::database::Database;
 use crate::document::Document;
+use crate::features::{AuditLog, VersionStore};
 use crate::file_store::{FileStore, StoredDocument};
 use crate::room::{Room, SharedRoom};
 use anyhow::{anyhow, Context, Result};
@@ -19,21 +20,28 @@ use protocol::messages::{ClientMessage, ServerMessage};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::{mpsc, RwLock, Mutex};
 use tower_http::cors::{Any, CorsLayer};
 use uuid::Uuid;
+use crate::secure_channel;
 
-/// Server state shared across connections
+// Server state shared across connections
 #[derive(Clone)]
 pub struct ServerState {
-    /// Active rooms
+    // Active rooms
     rooms: Arc<RwLock<HashMap<String, SharedRoom>>>,
 
-    /// Database
+    // Database
     db: Database,
 
-    /// File store
+    // File store
     file_store: Arc<FileStore>,
+
+    // Version history store
+    pub version_store: VersionStore,
+
+    // Audit log
+    pub audit_log: AuditLog,
 }
 
 impl ServerState {
@@ -42,10 +50,12 @@ impl ServerState {
             rooms: Arc::new(RwLock::new(HashMap::new())),
             db,
             file_store: Arc::new(file_store),
+            version_store: VersionStore::new(),
+            audit_log: AuditLog::new(),
         }
     }
 
-    /// Get or load a room
+    // Get or load a room
     async fn get_room(&self, room_id: &str) -> Result<Option<SharedRoom>> {
         // Check if room is already loaded in memory
         {
@@ -74,7 +84,7 @@ impl ServerState {
         Ok(None)
     }
 
-    /// Load room from storage
+    // Load room from storage
     async fn load_room_from_storage(
         &self,
         room_id: &str,
@@ -112,7 +122,7 @@ impl ServerState {
         Ok(Arc::new(RwLock::new(room)))
     }
 
-    /// Create a new room
+    // Create a new room
     async fn create_room(
         &self,
         name: String,
@@ -159,7 +169,7 @@ impl ServerState {
         Ok(room_id)
     }
 
-    /// Persist room state to disk
+    // Persist room state to disk
     async fn persist_room(&self, room_id: &str) -> Result<()> {
         let room = self
             .get_room(room_id)
@@ -185,7 +195,7 @@ impl ServerState {
         Ok(())
     }
 
-    /// Remove room if empty
+    // Remove room if empty
     async fn cleanup_room(&self, room_id: &str) -> Result<()> {
         let room = match self.get_room(room_id).await? {
             Some(r) => r,
@@ -211,12 +221,12 @@ impl ServerState {
     }
 }
 
-/// Handle WebSocket upgrade
+// Handle WebSocket upgrade
 pub async fn websocket_handler(State(state): State<ServerState>, ws: WebSocketUpgrade) -> Response {
     ws.on_upgrade(|socket| handle_socket(socket, state))
 }
 
-/// Handle individual WebSocket connection
+// Handle individual WebSocket connection
 async fn handle_socket(socket: WebSocket, state: ServerState) {
     let client_id = Uuid::new_v4();
     tracing::info!("New WebSocket connection: {}", client_id);
@@ -224,48 +234,88 @@ async fn handle_socket(socket: WebSocket, state: ServerState) {
     let (mut sender, mut receiver) = socket.split();
     let (tx, mut rx) = mpsc::unbounded_channel::<ServerMessage>();
 
-    // Spawn task to send messages to client
+    // Handshake first (plaintext)
+    // After this there will be encrypted binary only.
+    let sr = match secure_channel::server_handshake(&mut sender, &mut receiver).await {
+        Ok(pair) => pair, // (SecureWrite, SecureRead)
+        Err(e) => {
+            tracing::warn!("Handshake failed for {}: {}", client_id, e);
+            return;
+        }
+    };
+
+    // Shared secure state (write half in .0, read half in .1)
+    let sc = Arc::new(Mutex::new(sr));
+
+    // SEND TASK: ServerMessage -> JSON bytes -> encrypt -> Binary frame
+    let sc_for_send = sc.clone();
     let send_task = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
-            let json = match serde_json::to_string(&msg) {
-                Ok(j) => j,
+            let plaintext = match serde_json::to_vec(&msg) {
+                Ok(b) => b,
                 Err(e) => {
-                    tracing::error!("Failed to serialize message: {}", e);
+                    tracing::error!("Failed to serialize ServerMessage: {}", e);
                     continue;
                 }
             };
 
-            if sender.send(Message::Text(json.into())).await.is_err() {
+            // Using the write half
+            let ciphertext: Vec<u8> = {
+                let mut guard = sc_for_send.lock().await;
+
+                match guard.0.encrypt(&plaintext) {
+                    Ok(ct) => ct,
+                    Err(e) => {
+                        tracing::error!("Encrypt failed (closing connection): {}", e);
+                        return;
+                    }
+                }
+            };
+
+            if sender.send(Message::Binary(ciphertext.into())).await.is_err() {
                 break;
             }
         }
     });
 
-    // Track current room
     let mut current_room: Option<String> = None;
 
-    // Handle incoming messages
+    // Receiving loop
     while let Some(Ok(msg)) = receiver.next().await {
-        if let Message::Text(text) = msg {
-            match serde_json::from_str::<ClientMessage>(&text) {
-                Ok(client_msg) => {
-                    if let Err(e) =
-                        handle_client_message(&state, client_id, &tx, client_msg, &mut current_room)
-                            .await
-                    {
-                        tracing::error!("Error handling message: {}", e);
+        match msg {
+            Message::Binary(ct) => {
+                // Using the read half now
+                let plaintext: Vec<u8> = {
+                    let mut guard = sc.lock().await;
+
+                    match guard.1.decrypt(ct.as_ref()) {
+                        Ok(pt) => pt.to_vec(),
+                        Err(e) => {
+                            tracing::warn!("Decrypt failed (closing connection): {}", e);
+                            break;
+                        }
+                    }
+                };
+
+                match serde_json::from_slice::<ClientMessage>(&plaintext) {
+                    Ok(client_msg) => {
+                        if let Err(e) =
+                            handle_client_message(&state, client_id, &tx, client_msg, &mut current_room).await
+                        {
+                            tracing::error!("Error handling message: {}", e);
+                            let _ = tx.send(ServerMessage::Error { message: e.to_string() });
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to parse decrypted ClientMessage: {}", e);
                         let _ = tx.send(ServerMessage::Error {
-                            message: e.to_string(),
+                            message: format!("Invalid message format: {}", e),
                         });
                     }
                 }
-                Err(e) => {
-                    tracing::error!("Failed to parse message: {}", e);
-                    let _ = tx.send(ServerMessage::Error {
-                        message: format!("Invalid message format: {}", e),
-                    });
-                }
             }
+            Message::Close(_) => break,
+            _ => {} // Ignore non-binary stuff after handshake
         }
     }
 
@@ -282,7 +332,9 @@ async fn handle_socket(socket: WebSocket, state: ServerState) {
     tracing::info!("WebSocket connection closed: {}", client_id);
 }
 
-/// Handle a client message
+
+
+// Handle a client message
 async fn handle_client_message(
     state: &ServerState,
     client_id: Uuid,
@@ -297,6 +349,10 @@ async fn handle_client_message(
             filename,
             initial_content,
         } => {
+            // Keep a copy of initial content for the response
+            let content_for_response = initial_content.clone();
+            let filename_for_response = filename.clone();
+
             let room_id = state
                 .create_room(room_name, password.clone(), filename, initial_content)
                 .await?;
@@ -319,6 +375,8 @@ async fn handle_client_message(
                 room_id,
                 site_id,
                 num_sites: 10,
+                filename: filename_for_response,
+                document_content: content_for_response,
             })?;
         }
 
@@ -421,6 +479,124 @@ async fn handle_client_message(
             }
         }
 
+        ClientMessage::Insert { position, text } => {
+            if let Some(room_id) = current_room.as_ref() {
+                let room = state
+                    .get_room(room_id)
+                    .await?
+                    .ok_or_else(|| anyhow!("Room not found"))?;
+
+                // Get site_id for this client
+                let site_id = {
+                    let room_guard = room.read().await;
+                    room_guard
+                        .clients
+                        .get(&client_id)
+                        .map(|c| c.site_id)
+                        .ok_or_else(|| anyhow!("Client not found in room"))?
+                };
+
+                // Insert each character using insert_local to get proper CRDT operations
+                let mut ops = Vec::new();
+                {
+                    let room_guard = room.read().await;
+                    let mut doc = room_guard.document.write().await;
+
+                    for (i, ch) in text.chars().enumerate() {
+                        if let Some(op) = doc.rga.insert_local(position + i, ch) {
+                            doc.buffered_ops.push(op.clone());
+                            ops.push(op);
+                        }
+                    }
+
+                    // Check if checkpoint needed
+                    if doc.needs_checkpoint() {
+                        let ops_applied = doc.checkpoint();
+                        let content = doc.get_content();
+                        drop(doc);
+                        drop(room_guard);
+
+                        room.read()
+                            .await
+                            .broadcast_checkpoint(content, ops_applied)
+                            .await;
+
+                        state.persist_room(room_id).await?;
+                    }
+                }
+
+                // Broadcast each operation to other clients
+                for op in ops {
+                    room.read()
+                        .await
+                        .broadcast_operation(client_id, site_id, op)
+                        .await;
+                }
+
+                // Auto-sync: broadcast updated document to all clients
+                room.read().await.broadcast_sync().await;
+            }
+        }
+
+        ClientMessage::Delete { position, length } => {
+            if let Some(room_id) = current_room.as_ref() {
+                let room = state
+                    .get_room(room_id)
+                    .await?
+                    .ok_or_else(|| anyhow!("Room not found"))?;
+
+                // Get site_id for this client
+                let site_id = {
+                    let room_guard = room.read().await;
+                    room_guard
+                        .clients
+                        .get(&client_id)
+                        .map(|c| c.site_id)
+                        .ok_or_else(|| anyhow!("Client not found in room"))?
+                };
+
+                // Delete each character using delete_local
+                let mut ops = Vec::new();
+                {
+                    let room_guard = room.read().await;
+                    let mut doc = room_guard.document.write().await;
+
+                    // Delete from the same position repeatedly (as chars shift left)
+                    for _ in 0..length {
+                        if let Some(op) = doc.rga.delete_local(position) {
+                            doc.buffered_ops.push(op.clone());
+                            ops.push(op);
+                        }
+                    }
+
+                    if doc.needs_checkpoint() {
+                        let ops_applied = doc.checkpoint();
+                        let content = doc.get_content();
+                        drop(doc);
+                        drop(room_guard);
+
+                        room.read()
+                            .await
+                            .broadcast_checkpoint(content, ops_applied)
+                            .await;
+
+                        state.persist_room(room_id).await?;
+                    }
+                }
+
+                // Broadcast operations
+                for op in ops {
+                    room.read()
+                        .await
+                        .broadcast_operation(client_id, site_id, op)
+                        .await;
+                }
+
+                // Auto-sync: broadcast updated document to all clients
+                room.read().await.broadcast_sync().await;
+            }
+        }
+
         ClientMessage::RequestSync => {
             if let Some(room_id) = current_room.as_ref() {
                 let room = state
@@ -428,13 +604,98 @@ async fn handle_client_message(
                     .await?
                     .ok_or_else(|| anyhow!("Room not found"))?;
 
-                let (_, base_content, buffered_ops) = room.read().await.get_room_info().await;
+                // Get current RGA content (not base_content which is from last checkpoint)
+                let room_guard = room.read().await;
+                let doc = room_guard.document.read().await;
+                let current_content = doc.get_content();
+                let buffered_ops = doc.get_buffered_ops().to_vec();
+                drop(doc);
+                drop(room_guard);
 
                 tx.send(ServerMessage::SyncResponse {
-                    document_content: base_content,
+                    document_content: current_content,
                     buffered_ops,
                 })?;
             }
+        }
+
+        ClientMessage::SaveVersion { author } => {
+            if let Some(room_id) = current_room.as_ref() {
+                let room = state
+                    .get_room(room_id)
+                    .await?
+                    .ok_or_else(|| anyhow!("Room not found"))?;
+
+                let content = room.read().await.document.read().await.get_content();
+                let version = state
+                    .version_store
+                    .save_version(room_id, content, author.clone())
+                    .await?;
+
+                // Log the activity
+                state
+                    .audit_log
+                    .log_event(
+                        Some(room_id.clone()),
+                        author,
+                        "save_version",
+                        Some(format!("Saved version {}", version.seq)),
+                    )
+                    .await?;
+
+                tx.send(ServerMessage::VersionSaved { version })?;
+            }
+        }
+
+        ClientMessage::ListVersions => {
+            if let Some(room_id) = current_room.as_ref() {
+                let versions = state.version_store.list_versions(room_id).await;
+                tx.send(ServerMessage::VersionList { versions })?;
+            }
+        }
+
+        ClientMessage::RestoreVersion { seq } => {
+            if let Some(room_id) = current_room.as_ref() {
+                if let Some(version) = state.version_store.restore_version(room_id, seq).await {
+                    // Log the restore activity
+                    state
+                        .audit_log
+                        .log_event(
+                            Some(room_id.clone()),
+                            None,
+                            "restore_version",
+                            Some(format!("Restored to version {}", seq)),
+                        )
+                        .await?;
+
+                    tx.send(ServerMessage::VersionRestored { version })?;
+                } else {
+                    tx.send(ServerMessage::Error {
+                        message: format!("Version {} not found", seq),
+                    })?;
+                }
+            }
+        }
+
+        ClientMessage::CompareVersions { a_seq, b_seq } => {
+            if let Some(room_id) = current_room.as_ref() {
+                if let Some(diff) = state
+                    .version_store
+                    .compare_versions(room_id, a_seq, b_seq)
+                    .await
+                {
+                    tx.send(ServerMessage::VersionDiff { diff })?;
+                } else {
+                    tx.send(ServerMessage::Error {
+                        message: "One or both versions not found".to_string(),
+                    })?;
+                }
+            }
+        }
+
+        ClientMessage::GetActivityLog { limit } => {
+            let events = state.audit_log.list_events(limit).await;
+            tx.send(ServerMessage::ActivityLog { events })?;
         }
 
         ClientMessage::Ping => {
@@ -445,7 +706,7 @@ async fn handle_client_message(
     Ok(())
 }
 
-/// Create and configure the server
+// Create and configure the server
 pub async fn create_server(state: ServerState, addr: SocketAddr) -> Result<()> {
     // Configure CORS
     let cors = CorsLayer::new()
