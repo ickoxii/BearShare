@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-const CHECKPOINT_THRESHOLD: usize = 100;
+const CHECKPOINT_THRESHOLD: usize = 1;
 
 /// Represents a document being collaboratively edited
 #[derive(Debug)]
@@ -55,10 +55,7 @@ impl Document {
         self.rga.apply_remote(op.clone());
         self.buffered_ops.push(op);
 
-        // Check if checkpoint threshold reached
-        if self.buffered_ops.len() >= CHECKPOINT_THRESHOLD {
-            self.checkpoint();
-        }
+        // Note: checkpoint is now handled by the server to ensure persistence
     }
 
     /// Perform checkpoint: apply all buffered ops to base content

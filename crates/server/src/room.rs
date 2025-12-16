@@ -1,10 +1,10 @@
 // Room management for collaborative editing
 
 use crate::document::{Document, SharedDocument};
-use crate::messages::ServerMessage;
 use anyhow::{anyhow, Result};
 use argon2::password_hash::{rand_core::OsRng, SaltString};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
+use protocol::messages::ServerMessage;
 use rga::RemoteOp;
 use std::collections::HashMap;
 use std::sync::Arc;
