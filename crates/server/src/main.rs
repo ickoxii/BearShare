@@ -6,6 +6,7 @@ mod file_store;
 mod messages;
 mod room;
 mod server;
+mod features;
 
 use anyhow::Result;
 use std::net::SocketAddr;
