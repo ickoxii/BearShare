@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  # MySQL database for local development
+  db:
+    image: mysql:8.4.2
+    command: --mysql-native-password=ON
+    restart: always
+    ports:
+      - '3307:3306'
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: bearshare
+      MYSQL_TCP_PORT: 3306
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-ppassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  mysql-data:
+    driver: local
+
+# For local development:
+# 1. Start the database: docker-compose -f local.docker-compose.yml up -d
+# 2. Run the server locally with:
+#    export DATABASE_URL="mysql://root:password@127.0.0.1:3307/bearshare"
+#    export BIND_ADDR="127.0.0.1:9001"
+#    cargo run
+# 3. The server will listen on ws://127.0.0.1:9001/ws
+#
+# Alternative (SQLite for quick testing):
+#    export DATABASE_URL="sqlite:bearshare.db"
+#    cargo run

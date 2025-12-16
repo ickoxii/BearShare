@@ -1,7 +1,8 @@
 {
     "image": "docker.io/acfreeman/rustnetworking",
     "runArgs": [
-    "--cap-add=NET_ADMIN",
-    "--privileged"
+        "--platform=linux/amd64",
+        "--cap-add=NET_ADMIN",
+        "--privileged"
     ]
 }
