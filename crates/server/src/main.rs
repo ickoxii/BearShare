@@ -6,10 +6,12 @@ mod file_store;
 mod messages;
 mod room;
 mod server;
+mod secure_channel;
 
 use anyhow::Result;
 use std::net::SocketAddr;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+
 
 #[cfg(not(feature = "prod"))]
 const IP: &str = "127.0.0.1:9001";
