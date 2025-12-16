@@ -1,0 +1,31 @@
+name: Build & Deploy
+
+on:
+  push:
+    branches:
+      - ickoxii/crdt
+
+jobs:
+  build-and-deploy:
+    runs-on: [self-hosted, prod]
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Pre-Clean
+        run: |
+          docker image prune -af
+
+      - name: Build
+        run: |
+          docker compose -f docker/ci.docker-compose.yml build
+
+      - name: Deploy
+        run: |
+          # potentially might have to `down -v`
+          docker compose -f docker/ci.docker-compose.yml down
+          docker compose -f docker/ci.docker-compose.yml up server -d --build
+
+      - name: Post-Clean
+        run: |
+          docker image prune -af
+          docker system prune -f
