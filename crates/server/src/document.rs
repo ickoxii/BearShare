@@ -151,7 +151,6 @@ mod tests {
     fn test_checkpoint_threshold() {
         let mut doc = Document::new(Uuid::new_v4(), "test.txt".to_string(), "".to_string(), 2);
 
-        // Add operations up to threshold - 1 using apply_operation
         for i in 0..(CHECKPOINT_THRESHOLD - 1) {
             let op = doc.rga.insert_local(i, 'a').unwrap();
             doc.apply_operation(op);
@@ -159,11 +158,17 @@ mod tests {
 
         assert_eq!(doc.buffered_ops_count(), CHECKPOINT_THRESHOLD - 1);
 
-        // This operation should trigger checkpoint (reaches threshold)
+        // This operation should reach threshold
         let op = doc.rga.insert_local(CHECKPOINT_THRESHOLD - 1, 'b').unwrap();
         doc.apply_operation(op);
 
-        // After checkpoint, buffer should be empty (checkpoint clears all)
+        // Verify needs_checkpoint() returns true when threshold is reached
+        assert!(doc.needs_checkpoint());
+        assert_eq!(doc.buffered_ops_count(), CHECKPOINT_THRESHOLD);
+
+        doc.checkpoint();
+
+        // After checkpoint, buffer should be empty
         assert_eq!(doc.buffered_ops_count(), 0);
     }
 
