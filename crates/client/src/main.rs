@@ -6,7 +6,6 @@ use tokio_tungstenite::connect_async;
 use tokio_tungstenite::tungstenite::Message;
 
 mod doc;
-mod messages;
 
 use crate::doc::{Document, Op};
 

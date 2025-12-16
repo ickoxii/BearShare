@@ -4,6 +4,7 @@ members = [
     "crates/rga",
     "crates/server",
     "crates/client",
+    "crates/protocol",
 ]
 
 [workspace.package]

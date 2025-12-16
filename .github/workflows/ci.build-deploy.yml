@@ -23,7 +23,7 @@ jobs:
         run: |
           # potentially might have to `down -v`
           docker compose -f docker/ci.docker-compose.yml down
-          docker compose -f docker/ci.docker-compose.yml up server -d --build
+          docker compose -f docker/ci.docker-compose.yml up -d --build
 
       - name: Post-Clean
         run: |

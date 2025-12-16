@@ -6,7 +6,7 @@ services:
     image: bearshare-server
     build:
       context: ..
-      dockerfile: docker/ci.bearshare-server.Dockerfile
+      dockerfile: docker/bearshare-server.Dockerfile
     restart: always
     ports:
       - '9001:9001'
