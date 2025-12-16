@@ -8,27 +8,27 @@ use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use uuid::Uuid;
 
-/// Stored document state
+// Stored document state
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredDocument {
     pub id: String,
     pub filename: String,
     pub room_id: String,
-    /// Base content (last checkpoint)
+    // Base content (last checkpoint)
     pub content: String,
-    /// Buffered operations since last checkpoint
+    // Buffered operations since last checkpoint
     pub buffered_ops: Vec<RemoteOp<char>>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-/// File store for managing document persistence
+// File store for managing document persistence
 pub struct FileStore {
     root_dir: PathBuf,
 }
 
 impl FileStore {
-    /// Create a new file store
+    // Create a new file store
     pub async fn new<P: AsRef<Path>>(root_dir: P) -> Result<Self> {
         let root_dir = root_dir.as_ref().to_path_buf();
 
@@ -40,17 +40,17 @@ impl FileStore {
         Ok(FileStore { root_dir })
     }
 
-    /// Get path for a document
+    // Get path for a document
     fn document_path(&self, room_id: &str) -> PathBuf {
         self.root_dir.join(format!("{}.json", room_id))
     }
 
-    /// Get path for a document's actual content file
+    // Get path for a document's actual content file
     fn content_path(&self, room_id: &str, filename: &str) -> PathBuf {
         self.root_dir.join(format!("{}_{}", room_id, filename))
     }
 
-    /// Save document to disk
+    // Save document to disk
     pub async fn save_document(&self, doc: &StoredDocument) -> Result<()> {
         let path = self.document_path(&doc.room_id);
 
@@ -84,7 +84,7 @@ impl FileStore {
         Ok(())
     }
 
-    /// Load document from disk
+    // Load document from disk
     pub async fn load_document(&self, room_id: &str) -> Result<StoredDocument> {
         let path = self.document_path(room_id);
 
@@ -104,13 +104,13 @@ impl FileStore {
         Ok(doc)
     }
 
-    /// Check if document exists
+    // Check if document exists
     pub async fn document_exists(&self, room_id: &str) -> bool {
         let path = self.document_path(room_id);
         fs::metadata(&path).await.is_ok()
     }
 
-    /// Delete document
+    // Delete document
     pub async fn delete_document(&self, room_id: &str, filename: &str) -> Result<()> {
         let doc_path = self.document_path(room_id);
         let content_path = self.content_path(room_id, filename);
@@ -123,7 +123,7 @@ impl FileStore {
         Ok(())
     }
 
-    /// List all stored documents
+    // List all stored documents
     pub async fn list_documents(&self) -> Result<Vec<String>> {
         let mut entries = fs::read_dir(&self.root_dir)
             .await
@@ -143,7 +143,7 @@ impl FileStore {
         Ok(room_ids)
     }
 
-    /// Create a backup of a document
+    // Create a backup of a document
     pub async fn backup_document(&self, room_id: &str) -> Result<()> {
         let src = self.document_path(room_id);
         let backup_name = format!("{}.backup.{}", room_id, chrono::Utc::now().timestamp());
@@ -157,7 +157,7 @@ impl FileStore {
         Ok(())
     }
 
-    /// Clean up old backups (keep only N most recent)
+    // Clean up old backups 
     pub async fn cleanup_backups(&self, room_id: &str, keep: usize) -> Result<()> {
         let pattern = format!("{}.backup.", room_id);
         let mut backups = Vec::new();

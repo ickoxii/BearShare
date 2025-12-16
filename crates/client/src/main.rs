@@ -21,7 +21,7 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ClientMessage {
-    /// Create a new room with a document
+    // Create a new room with a document
     CreateRoom {
         room_name: String,
         password: String,
@@ -29,48 +29,48 @@ pub enum ClientMessage {
         initial_content: String,
     },
 
-    /// Join an existing room
+    // Join an existing room
     JoinRoom { room_id: String, password: String },
 
-    /// Leave the current room
+    // Leave the current room
     LeaveRoom,
 
-    /// Send a CRDT operation (legacy)
+    // Send a CRDT operation (legacy)
     Operation { op: RemoteOp<char> },
 
-    /// Insert text at a position (client-friendly)
+    // Insert text at a position (client-friendly)
     Insert { position: usize, text: String },
 
-    /// Delete text at a position (client-friendly)
+    // Delete text at a position (client-friendly)
     Delete { position: usize, length: usize },
 
-    /// Request current document state
+    // Request current document state
     RequestSync,
 
-    /// Save a version snapshot
+    // Save a version snapshot
     SaveVersion { author: Option<String> },
 
-    /// List all versions for the current document
+    // List all versions for the current document
     ListVersions,
 
-    /// Restore a specific version
+    // Restore a specific version
     RestoreVersion { seq: u64 },
 
-    /// Compare two versions
+    // Compare two versions
     CompareVersions { a_seq: u64, b_seq: u64 },
 
-    /// Get recent activity/audit log
+    // Get recent activity/audit log
     GetActivityLog { limit: Option<usize> },
 
-    /// Heartbeat/ping
+    // Heartbeat/ping
     Ping,
 }
 
-/// Messages sent from server to client
+// Messages sent from server to client
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ServerMessage {
-    /// Room created successfully
+    // Room created successfully
     RoomCreated {
         room_id: String,
         site_id: u32,
@@ -79,7 +79,7 @@ pub enum ServerMessage {
         document_content: String,
     },
 
-    /// Joined room successfully
+    // Joined room successfully
     JoinedRoom {
         room_id: String,
         site_id: u32,
@@ -89,53 +89,53 @@ pub enum ServerMessage {
         buffered_ops: Vec<RemoteOp<char>>,
     },
 
-    /// Another user joined the room
+    // Another user joined the room
     UserJoined { user_id: String, site_id: u32 },
 
-    /// Another user left the room
+    // Another user left the room
     UserLeft { user_id: String, site_id: u32 },
 
-    /// Incoming CRDT operation from another client
+    // Incoming CRDT operation from another client
     Operation { from_site: u32, op: RemoteOp<char> },
 
-    /// Document checkpoint reached
+    // Document checkpoint reached
     Checkpoint {
         document_content: String,
         ops_applied: usize,
     },
 
-    /// Synchronization response
+    // Synchronization response
     SyncResponse {
         document_content: String,
         buffered_ops: Vec<RemoteOp<char>>,
     },
 
-    /// Error message
+    // Error message
     Error { message: String },
 
-    /// Pong response to ping
+    // Pong response to ping
     Pong,
 
-    /// Version saved successfully
+    // Version saved successfully
     VersionSaved { version: Version },
 
-    /// List of versions
+    // List of versions
     VersionList { versions: Vec<Version> },
 
-    /// Version restored (contains content to apply)
+    // Version restored (contains content to apply)
     VersionRestored { version: Version },
 
-    /// Version comparison diff
+    // Version comparison diff
     VersionDiff { diff: String },
 
-    /// Activity log events
+    // Activity log events
     ActivityLog { events: Vec<ActivityEvent> },
 
-    /// New activity event (broadcast)
+    // New activity event (broadcast)
     ActivityEvent { event: ActivityEvent },
 }
 
-/// A saved version entry for a document
+// A saved version entry for a document
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Version {
     pub id: u64,
@@ -146,7 +146,7 @@ pub struct Version {
     pub seq: u64,
 }
 
-/// Activity / Audit log event
+// Activity / Audit log event
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ActivityEvent {
     pub seq: u64,
@@ -158,18 +158,18 @@ pub struct ActivityEvent {
 }
 
 // Client State
-/// Client state for collaborative editing
+// Client state for collaborative editing
 #[derive(Debug, Clone)]
 struct ClientState {
-    /// Our site ID (assigned by server)
+    // Our site ID (assigned by server)
     site_id: Option<u32>,
-    /// Number of sites in the room
+    // Number of sites in the room
     num_sites: usize,
-    /// Current room ID
+    // Current room ID
     room_id: Option<String>,
-    /// Document filename
+    // Document filename
     filename: Option<String>,
-    /// Current document content (synced from server)
+    // Current document content (synced from server)
     content: String,
 }
 
@@ -184,7 +184,7 @@ impl ClientState {
         }
     }
 
-    /// Apply a local insert operation
+    // Apply a local insert operation
     fn local_insert(&mut self, pos: usize, text: &str) -> bool {
         if pos > self.content.len() {
             return false;
@@ -193,7 +193,7 @@ impl ClientState {
         true
     }
 
-    /// Apply a local delete operation
+    // Apply a local delete operation
     fn local_delete(&mut self, pos: usize, len: usize) -> bool {
         if pos + len > self.content.len() {
             return false;
@@ -202,7 +202,7 @@ impl ClientState {
         true
     }
 
-    /// Apply a remote operation to update local view
+    // Apply a remote operation to update local view
     fn apply_remote_op(&mut self, op: &RemoteOp<char>) {
         match op {
             RemoteOp::Insert { value, .. } => {

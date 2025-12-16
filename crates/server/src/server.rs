@@ -25,22 +25,22 @@ use tower_http::cors::{Any, CorsLayer};
 use uuid::Uuid;
 use crate::secure_channel;
 
-/// Server state shared across connections
+// Server state shared across connections
 #[derive(Clone)]
 pub struct ServerState {
-    /// Active rooms
+    // Active rooms
     rooms: Arc<RwLock<HashMap<String, SharedRoom>>>,
 
-    /// Database
+    // Database
     db: Database,
 
-    /// File store
+    // File store
     file_store: Arc<FileStore>,
 
-    /// Version history store
+    // Version history store
     pub version_store: VersionStore,
 
-    /// Audit log
+    // Audit log
     pub audit_log: AuditLog,
 }
 
@@ -55,7 +55,7 @@ impl ServerState {
         }
     }
 
-    /// Get or load a room
+    // Get or load a room
     async fn get_room(&self, room_id: &str) -> Result<Option<SharedRoom>> {
         // Check if room is already loaded in memory
         {
@@ -84,7 +84,7 @@ impl ServerState {
         Ok(None)
     }
 
-    /// Load room from storage
+    // Load room from storage
     async fn load_room_from_storage(
         &self,
         room_id: &str,
@@ -122,7 +122,7 @@ impl ServerState {
         Ok(Arc::new(RwLock::new(room)))
     }
 
-    /// Create a new room
+    // Create a new room
     async fn create_room(
         &self,
         name: String,
@@ -169,7 +169,7 @@ impl ServerState {
         Ok(room_id)
     }
 
-    /// Persist room state to disk
+    // Persist room state to disk
     async fn persist_room(&self, room_id: &str) -> Result<()> {
         let room = self
             .get_room(room_id)
@@ -195,7 +195,7 @@ impl ServerState {
         Ok(())
     }
 
-    /// Remove room if empty
+    // Remove room if empty
     async fn cleanup_room(&self, room_id: &str) -> Result<()> {
         let room = match self.get_room(room_id).await? {
             Some(r) => r,
@@ -221,12 +221,12 @@ impl ServerState {
     }
 }
 
-/// Handle WebSocket upgrade
+// Handle WebSocket upgrade
 pub async fn websocket_handler(State(state): State<ServerState>, ws: WebSocketUpgrade) -> Response {
     ws.on_upgrade(|socket| handle_socket(socket, state))
 }
 
-/// Handle individual WebSocket connection
+// Handle individual WebSocket connection
 async fn handle_socket(socket: WebSocket, state: ServerState) {
     let client_id = Uuid::new_v4();
     tracing::info!("New WebSocket connection: {}", client_id);
@@ -334,7 +334,7 @@ async fn handle_socket(socket: WebSocket, state: ServerState) {
 
 
 
-/// Handle a client message
+// Handle a client message
 async fn handle_client_message(
     state: &ServerState,
     client_id: Uuid,
@@ -706,7 +706,7 @@ async fn handle_client_message(
     Ok(())
 }
 
-/// Create and configure the server
+// Create and configure the server
 pub async fn create_server(state: ServerState, addr: SocketAddr) -> Result<()> {
     // Configure CORS
     let cors = CorsLayer::new()

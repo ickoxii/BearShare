@@ -1,13 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-/// S4Vector: A quadruple vector for globally unique operation identifiers
-/// Derived from vector clocks with fixed size for efficiency
-///
-/// Fields (from Section 5.1):
-/// - ssn: session number (increments on membership changes)
-/// - sid: site ID (unique to each site)
-/// - sum: sum of all vector clock components
-/// - seq: sequence number for tombstone purging
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct S4Vector {
     pub ssn: u32,
@@ -21,20 +13,18 @@ impl S4Vector {
         S4Vector { ssn, sid, sum, seq }
     }
 
-    /// S4Vector ordering as defined in Definition 9
-    /// Implements Precedence Transitivity (PT) through total ordering
     pub fn precedes(&self, other: &S4Vector) -> bool {
-        // Condition 1: Different sessions - order by session number
+        // order by session number
         if self.ssn != other.ssn {
             return self.ssn < other.ssn;
         }
 
-        // Condition 2: Same session, different sums - order by sum
+        // Same session, different sums - order by sum
         if self.sum != other.sum {
             return self.sum < other.sum;
         }
 
-        // Condition 3: Same session and sum - order by site ID
+        // Same session and sum - order by site ID
         self.sid < other.sid
     }
 }
@@ -71,7 +61,6 @@ mod tests {
         assert!(v1.precedes(&v3));
         assert!(v2.precedes(&v3));
 
-        // Transitivity check
         assert!(v1 < v2);
         assert!(v2 < v3);
         assert!(v1 < v3);

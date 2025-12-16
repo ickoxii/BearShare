@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tokio::sync::{mpsc, RwLock};
 use uuid::Uuid;
 
-/// Represents a client connected to a room
+// Represents a client connected to a room
 #[derive(Debug, Clone)]
 pub struct Client {
     pub id: Uuid,
@@ -19,33 +19,33 @@ pub struct Client {
     pub sender: mpsc::UnboundedSender<ServerMessage>,
 }
 
-/// A collaborative editing room
+// A collaborative editing room
 #[derive(Debug)]
 pub struct Room {
-    /// Room ID
+    // Room ID
     pub id: String,
 
-    /// Room name (user-friendly)
+    // Room name (user-friendly)
     pub name: String,
 
-    /// Password hash (Argon2)
+    // Password hash (Argon2)
     pub(crate) password_hash: String,
 
-    /// The document being edited
+    // The document being edited
     pub document: SharedDocument,
 
-    /// Connected clients
+    // Connected clients
     pub(crate) clients: HashMap<Uuid, Client>,
 
-    /// Next site ID to assign
+    // Next site ID to assign
     pub next_site_id: u32,
 
-    /// Created timestamp
+    // Created timestamp
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
 impl Room {
-    /// Create a new room
+    // Create a new room
     pub fn new(
         id: String,
         name: String,
@@ -76,7 +76,7 @@ impl Room {
         })
     }
 
-    /// Verify password
+    // Verify password
     pub fn verify_password(&self, password: &str) -> bool {
         let parsed_hash = match PasswordHash::new(&self.password_hash) {
             Ok(hash) => hash,
@@ -88,7 +88,7 @@ impl Room {
             .is_ok()
     }
 
-    /// Add a client to the room
+    // Add a client to the room
     pub async fn add_client(
         &mut self,
         client_id: Uuid,
@@ -125,7 +125,7 @@ impl Room {
         Ok(site_id)
     }
 
-    /// Remove a client from the room
+    // Remove a client from the room
     pub async fn remove_client(&mut self, client_id: Uuid) -> Result<()> {
         if let Some(client) = self.clients.remove(&client_id) {
             // Notify other clients
@@ -144,23 +144,23 @@ impl Room {
         Ok(())
     }
 
-    /// Get client count
+    // Get client count
     pub fn client_count(&self) -> usize {
         self.clients.len()
     }
 
-    /// Check if room is empty
+    // Check if room is empty
     pub fn is_empty(&self) -> bool {
         self.clients.is_empty()
     }
 
-    /// Broadcast operation to all clients except sender
+    // Broadcast operation to all clients except sender
     pub async fn broadcast_operation(&self, from_client: Uuid, from_site: u32, op: RemoteOp<char>) {
         let message = ServerMessage::Operation { from_site, op };
         self.broadcast_except(from_client, message).await;
     }
 
-    /// Broadcast checkpoint to all clients
+    // Broadcast checkpoint to all clients
     pub async fn broadcast_checkpoint(&self, content: String, ops_applied: usize) {
         let message = ServerMessage::Checkpoint {
             document_content: content,
@@ -169,7 +169,7 @@ impl Room {
         self.broadcast(message).await;
     }
 
-    /// Broadcast sync response to all clients (for auto-sync after operations)
+    // Broadcast sync response to all clients (for auto-sync after operations)
     pub async fn broadcast_sync(&self) {
         let doc = self.document.read().await;
         let content = doc.get_content();
@@ -183,14 +183,14 @@ impl Room {
         self.broadcast(message).await;
     }
 
-    /// Broadcast message to all clients
+    // Broadcast message to all clients
     async fn broadcast(&self, message: ServerMessage) {
         for client in self.clients.values() {
             let _ = client.sender.send(message.clone());
         }
     }
 
-    /// Broadcast message to all clients except one
+    // Broadcast message to all clients except one
     async fn broadcast_except(&self, except: Uuid, message: ServerMessage) {
         for (id, client) in &self.clients {
             if *id != except {
@@ -199,7 +199,7 @@ impl Room {
         }
     }
 
-    /// Send message to specific client
+    // Send message to specific client
     pub async fn send_to_client(&self, client_id: Uuid, message: ServerMessage) -> Result<()> {
         if let Some(client) = self.clients.get(&client_id) {
             client
@@ -210,7 +210,7 @@ impl Room {
         Ok(())
     }
 
-    /// Get room info for new joiners
+    // Get room info for new joiners
     pub async fn get_room_info(&self) -> (String, String, Vec<RemoteOp<char>>) {
         let doc = self.document.read().await;
         (
@@ -221,7 +221,7 @@ impl Room {
     }
 }
 
-/// Shared room state
+// Shared room state
 pub type SharedRoom = Arc<RwLock<Room>>;
 
 #[cfg(test)]

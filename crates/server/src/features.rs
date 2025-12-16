@@ -1,9 +1,7 @@
 use anyhow::Result;
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use chrono::Utc;
 use std::{
     collections::HashMap,
-    fmt,
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -13,27 +11,10 @@ use tokio::{
     sync::{broadcast, RwLock},
     time::{sleep, timeout, Duration},
 };
+use serde::{Deserialize, Serialize};
 
-/// A saved version entry for a document.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Version {
-    pub id: u64,
-    pub doc_id: String,
-    pub content: String,
-    pub author: Option<String>,
-    pub timestamp: DateTime<Utc>,
-    pub seq: u64,
-}
-
-impl fmt::Display for Version {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "Version {} (seq {}) by {:?} at {}",
-            self.id, self.seq, self.author, self.timestamp
-        )
-    }
-}
+// Re-export the protocol types for use in server code
+pub use protocol::{ActivityEvent, Version};
 
 /// In-memory version timeline store. Replace persistence points with DB calls.
 #[derive(Clone, Default)]
@@ -51,7 +32,7 @@ impl VersionStore {
         }
     }
 
-    /// Save a new version for a doc. Persist to DB/filestore where needed.
+    // Save a new version for a doc. Persist to DB/filestore where needed.
     pub async fn save_version(
         &self,
         doc_id: impl Into<String>,
@@ -79,13 +60,13 @@ impl VersionStore {
         Ok(version)
     }
 
-    /// List past versions for a document (most recent last).
+    // List past versions for a document (most recent last).
     pub async fn list_versions(&self, doc_id: &str) -> Vec<Version> {
         let map = self.inner.read().await;
         map.get(doc_id).cloned().unwrap_or_default()
     }
 
-    /// Get a specific version by seq/id.
+    // Get a specific version by seq/id.
     pub async fn get_version(&self, doc_id: &str, seq: u64) -> Option<Version> {
         let map = self.inner.read().await;
         map.get(doc_id)
@@ -93,14 +74,12 @@ impl VersionStore {
             .cloned()
     }
 
-    /// Restore a version: here we return the content to be applied to the live document.
-    /// The caller should apply it and create a new version if desired (or mark restore).
+    // Restore a version: here we return the content to be applied to the live document.
     pub async fn restore_version(&self, doc_id: &str, seq: u64) -> Option<Version> {
         self.get_version(doc_id, seq).await
     }
 
-    /// Very small text diff: lines present in new but not in old, and vice-versa.
-    /// Not a full-featured diff; replace with a crate like `similar` for better output.
+    // Very small text diff: lines present in new but not in old, and vice-versa.
     pub async fn compare_versions(&self, doc_id: &str, a_seq: u64, b_seq: u64) -> Option<String> {
         let a = self.get_version(doc_id, a_seq).await?;
         let b = self.get_version(doc_id, b_seq).await?;
@@ -133,7 +112,7 @@ impl VersionStore {
     }
 }
 
-/// States for auto-save visibility in the client UI.
+// States for auto-save visibility in the client UI.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum AutoSaveState {
     Saving,
@@ -141,9 +120,7 @@ pub enum AutoSaveState {
     OfflinePending,
 }
 
-/// Auto-saver helper. Sends state updates on a broadcast channel.
-/// The `save_with_retry` method takes an arbitrary async save function so it can be used with
-/// whichever backend (DB, RPC, etc.) you have in the server.
+// Auto-saver helper. Sends state updates on a broadcast channel.
 #[derive(Clone)]
 pub struct AutoSaver {
     pub state_tx: broadcast::Sender<AutoSaveState>,
@@ -164,13 +141,13 @@ impl AutoSaver {
         }
     }
 
-    /// Subscribe to state changes (server -> client UI).
+    // Subscribe to state changes (server -> client UI).
     pub fn subscribe_states(&self) -> broadcast::Receiver<AutoSaveState> {
         self.state_tx.subscribe()
     }
 
-    /// Generic save with timeout, ACK-like wait, and retries with exponential backoff.
-    /// `save_fn` should attempt to persist/send the version and return Ok(()) when done.
+    // Generic save with timeout, ACK-like wait, and retries with exponential backoff.
+    // `save_fn` should attempt to persist/send the version and return Ok(()) when done.
     pub async fn save_with_retry<F, Fut>(
         &self,
         version_content: String,
@@ -219,18 +196,7 @@ impl AutoSaver {
     }
 }
 
-/// Activity / Audit log event
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ActivityEvent {
-    pub seq: u64,
-    pub doc_id: Option<String>,
-    pub user: Option<String>,
-    pub action: String, // "edit", "restore", "autosave", etc.
-    pub timestamp: DateTime<Utc>,
-    pub details: Option<String>,
-}
-
-/// Audit log: ordered events + server-side broadcast for clients.
+// Audit log: ordered events + server-side broadcast for clients.
 #[derive(Clone)]
 pub struct AuditLog {
     seq: Arc<AtomicU64>,
@@ -248,7 +214,7 @@ impl AuditLog {
         }
     }
 
-    /// Log an activity; persist to DB where needed and broadcast to subscribers.
+    // Log an activity; persist to DB where needed and broadcast to subscribers.
     pub async fn log_event(
         &self,
         doc_id: Option<String>,
@@ -277,12 +243,12 @@ impl AuditLog {
         Ok(event)
     }
 
-    /// Subscribe to a live stream of events (server can forward these to connected WebSocket clients).
+    // Subscribe to a live stream of events (server can forward these to connected WebSocket clients).
     pub fn subscribe(&self) -> broadcast::Receiver<ActivityEvent> {
         self.tx.subscribe()
     }
 
-    /// Return ordered events (whole history).
+    // Return ordered events (whole history).
     pub async fn list_events(&self, limit: Option<usize>) -> Vec<ActivityEvent> {
         let inner = self.inner.read().await;
         let mut v = inner.clone();
