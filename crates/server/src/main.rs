@@ -2,6 +2,7 @@
 
 mod database;
 mod document;
+mod features;
 mod file_store;
 mod messages;
 mod room;

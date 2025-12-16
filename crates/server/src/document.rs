@@ -156,20 +156,20 @@ mod tests {
     fn test_checkpoint_threshold() {
         let mut doc = Document::new(Uuid::new_v4(), "test.txt".to_string(), "".to_string(), 2);
 
-        // Add operations up to threshold
-        for i in 0..CHECKPOINT_THRESHOLD {
+        // Add operations up to threshold - 1 using apply_operation
+        for i in 0..(CHECKPOINT_THRESHOLD - 1) {
             let op = doc.rga.insert_local(i, 'a').unwrap();
-            doc.buffered_ops.push(op);
+            doc.apply_operation(op);
         }
 
-        assert_eq!(doc.buffered_ops_count(), CHECKPOINT_THRESHOLD);
+        assert_eq!(doc.buffered_ops_count(), CHECKPOINT_THRESHOLD - 1);
 
-        // This should trigger checkpoint
-        let op = doc.rga.insert_local(CHECKPOINT_THRESHOLD, 'b').unwrap();
+        // This operation should trigger checkpoint (reaches threshold)
+        let op = doc.rga.insert_local(CHECKPOINT_THRESHOLD - 1, 'b').unwrap();
         doc.apply_operation(op);
 
-        // Buffered ops should be cleared after checkpoint
-        assert_eq!(doc.buffered_ops_count(), 1); // Only the last op
+        // After checkpoint, buffer should be empty (checkpoint clears all)
+        assert_eq!(doc.buffered_ops_count(), 0);
     }
 
     #[test]

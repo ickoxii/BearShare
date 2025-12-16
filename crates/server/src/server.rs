@@ -2,6 +2,7 @@
 
 use crate::database::Database;
 use crate::document::Document;
+use crate::features::{AuditLog, VersionStore};
 use crate::file_store::{FileStore, StoredDocument};
 use crate::messages::{ClientMessage, ServerMessage};
 use crate::room::{Room, SharedRoom};
@@ -34,6 +35,12 @@ pub struct ServerState {
 
     /// File store
     file_store: Arc<FileStore>,
+
+    /// Version history store
+    pub version_store: VersionStore,
+
+    /// Audit log
+    pub audit_log: AuditLog,
 }
 
 impl ServerState {
@@ -42,6 +49,8 @@ impl ServerState {
             rooms: Arc::new(RwLock::new(HashMap::new())),
             db,
             file_store: Arc::new(file_store),
+            version_store: VersionStore::new(),
+            audit_log: AuditLog::new(),
         }
     }
 
@@ -297,6 +306,10 @@ async fn handle_client_message(
             filename,
             initial_content,
         } => {
+            // Keep a copy of initial content for the response
+            let content_for_response = initial_content.clone();
+            let filename_for_response = filename.clone();
+
             let room_id = state
                 .create_room(room_name, password.clone(), filename, initial_content)
                 .await?;
@@ -319,6 +332,8 @@ async fn handle_client_message(
                 room_id,
                 site_id,
                 num_sites: 10,
+                filename: filename_for_response,
+                document_content: content_for_response,
             })?;
         }
 
@@ -419,6 +434,124 @@ async fn handle_client_message(
             }
         }
 
+        ClientMessage::Insert { position, text } => {
+            if let Some(room_id) = current_room.as_ref() {
+                let room = state
+                    .get_room(room_id)
+                    .await?
+                    .ok_or_else(|| anyhow!("Room not found"))?;
+
+                // Get site_id for this client
+                let site_id = {
+                    let room_guard = room.read().await;
+                    room_guard
+                        .clients
+                        .get(&client_id)
+                        .map(|c| c.site_id)
+                        .ok_or_else(|| anyhow!("Client not found in room"))?
+                };
+
+                // Insert each character using insert_local to get proper CRDT operations
+                let mut ops = Vec::new();
+                {
+                    let room_guard = room.read().await;
+                    let mut doc = room_guard.document.write().await;
+
+                    for (i, ch) in text.chars().enumerate() {
+                        if let Some(op) = doc.rga.insert_local(position + i, ch) {
+                            doc.buffered_ops.push(op.clone());
+                            ops.push(op);
+                        }
+                    }
+
+                    // Check if checkpoint needed
+                    if doc.needs_checkpoint() {
+                        let ops_applied = doc.checkpoint();
+                        let content = doc.get_content();
+                        drop(doc);
+                        drop(room_guard);
+
+                        room.read()
+                            .await
+                            .broadcast_checkpoint(content, ops_applied)
+                            .await;
+
+                        state.persist_room(room_id).await?;
+                    }
+                }
+
+                // Broadcast each operation to other clients
+                for op in ops {
+                    room.read()
+                        .await
+                        .broadcast_operation(client_id, site_id, op)
+                        .await;
+                }
+
+                // Auto-sync: broadcast updated document to all clients
+                room.read().await.broadcast_sync().await;
+            }
+        }
+
+        ClientMessage::Delete { position, length } => {
+            if let Some(room_id) = current_room.as_ref() {
+                let room = state
+                    .get_room(room_id)
+                    .await?
+                    .ok_or_else(|| anyhow!("Room not found"))?;
+
+                // Get site_id for this client
+                let site_id = {
+                    let room_guard = room.read().await;
+                    room_guard
+                        .clients
+                        .get(&client_id)
+                        .map(|c| c.site_id)
+                        .ok_or_else(|| anyhow!("Client not found in room"))?
+                };
+
+                // Delete each character using delete_local
+                let mut ops = Vec::new();
+                {
+                    let room_guard = room.read().await;
+                    let mut doc = room_guard.document.write().await;
+
+                    // Delete from the same position repeatedly (as chars shift left)
+                    for _ in 0..length {
+                        if let Some(op) = doc.rga.delete_local(position) {
+                            doc.buffered_ops.push(op.clone());
+                            ops.push(op);
+                        }
+                    }
+
+                    if doc.needs_checkpoint() {
+                        let ops_applied = doc.checkpoint();
+                        let content = doc.get_content();
+                        drop(doc);
+                        drop(room_guard);
+
+                        room.read()
+                            .await
+                            .broadcast_checkpoint(content, ops_applied)
+                            .await;
+
+                        state.persist_room(room_id).await?;
+                    }
+                }
+
+                // Broadcast operations
+                for op in ops {
+                    room.read()
+                        .await
+                        .broadcast_operation(client_id, site_id, op)
+                        .await;
+                }
+
+                // Auto-sync: broadcast updated document to all clients
+                room.read().await.broadcast_sync().await;
+            }
+        }
+
         ClientMessage::RequestSync => {
             if let Some(room_id) = current_room.as_ref() {
                 let room = state
@@ -426,13 +559,98 @@ async fn handle_client_message(
                     .await?
                     .ok_or_else(|| anyhow!("Room not found"))?;
 
-                let (_, base_content, buffered_ops) = room.read().await.get_room_info().await;
+                // Get current RGA content (not base_content which is from last checkpoint)
+                let room_guard = room.read().await;
+                let doc = room_guard.document.read().await;
+                let current_content = doc.get_content();
+                let buffered_ops = doc.get_buffered_ops().to_vec();
+                drop(doc);
+                drop(room_guard);
 
                 tx.send(ServerMessage::SyncResponse {
-                    document_content: base_content,
+                    document_content: current_content,
                     buffered_ops,
                 })?;
             }
+        }
+
+        ClientMessage::SaveVersion { author } => {
+            if let Some(room_id) = current_room.as_ref() {
+                let room = state
+                    .get_room(room_id)
+                    .await?
+                    .ok_or_else(|| anyhow!("Room not found"))?;
+
+                let content = room.read().await.document.read().await.get_content();
+                let version = state
+                    .version_store
+                    .save_version(room_id, content, author.clone())
+                    .await?;
+
+                // Log the activity
+                state
+                    .audit_log
+                    .log_event(
+                        Some(room_id.clone()),
+                        author,
+                        "save_version",
+                        Some(format!("Saved version {}", version.seq)),
+                    )
+                    .await?;
+
+                tx.send(ServerMessage::VersionSaved { version })?;
+            }
+        }
+
+        ClientMessage::ListVersions => {
+            if let Some(room_id) = current_room.as_ref() {
+                let versions = state.version_store.list_versions(room_id).await;
+                tx.send(ServerMessage::VersionList { versions })?;
+            }
+        }
+
+        ClientMessage::RestoreVersion { seq } => {
+            if let Some(room_id) = current_room.as_ref() {
+                if let Some(version) = state.version_store.restore_version(room_id, seq).await {
+                    // Log the restore activity
+                    state
+                        .audit_log
+                        .log_event(
+                            Some(room_id.clone()),
+                            None,
+                            "restore_version",
+                            Some(format!("Restored to version {}", seq)),
+                        )
+                        .await?;
+
+                    tx.send(ServerMessage::VersionRestored { version })?;
+                } else {
+                    tx.send(ServerMessage::Error {
+                        message: format!("Version {} not found", seq),
+                    })?;
+                }
+            }
+        }
+
+        ClientMessage::CompareVersions { a_seq, b_seq } => {
+            if let Some(room_id) = current_room.as_ref() {
+                if let Some(diff) = state
+                    .version_store
+                    .compare_versions(room_id, a_seq, b_seq)
+                    .await
+                {
+                    tx.send(ServerMessage::VersionDiff { diff })?;
+                } else {
+                    tx.send(ServerMessage::Error {
+                        message: "One or both versions not found".to_string(),
+                    })?;
+                }
+            }
+        }
+
+        ClientMessage::GetActivityLog { limit } => {
+            let events = state.audit_log.list_events(limit).await;
+            tx.send(ServerMessage::ActivityLog { events })?;
         }
 
         ClientMessage::Ping => {

@@ -169,6 +169,20 @@ impl Room {
         self.broadcast(message).await;
     }
 
+    /// Broadcast sync response to all clients (for auto-sync after operations)
+    pub async fn broadcast_sync(&self) {
+        let doc = self.document.read().await;
+        let content = doc.get_content();
+        let buffered_ops = doc.get_buffered_ops().to_vec();
+        drop(doc);
+
+        let message = ServerMessage::SyncResponse {
+            document_content: content,
+            buffered_ops,
+        };
+        self.broadcast(message).await;
+    }
+
     /// Broadcast message to all clients
     async fn broadcast(&self, message: ServerMessage) {
         for client in self.clients.values() {

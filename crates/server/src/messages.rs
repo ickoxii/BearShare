@@ -1,5 +1,6 @@
 // WebSocket message types for client-server communication
 
+use crate::features::{ActivityEvent, Version};
 use rga::RemoteOp;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -22,11 +23,32 @@ pub enum ClientMessage {
     /// Leave the current room
     LeaveRoom,
 
-    /// Send a CRDT operation
+    /// Send a CRDT operation (legacy, for inter-server sync)
     Operation { op: RemoteOp<char> },
+
+    /// Insert text at a position (client-friendly)
+    Insert { position: usize, text: String },
+
+    /// Delete text at a position (client-friendly)
+    Delete { position: usize, length: usize },
 
     /// Request current document state
     RequestSync,
+
+    /// Save a version snapshot
+    SaveVersion { author: Option<String> },
+
+    /// List all versions for the current document
+    ListVersions,
+
+    /// Restore a specific version
+    RestoreVersion { seq: u64 },
+
+    /// Compare two versions
+    CompareVersions { a_seq: u64, b_seq: u64 },
+
+    /// Get recent activity/audit log
+    GetActivityLog { limit: Option<usize> },
 
     /// Heartbeat/ping
     Ping,
@@ -41,6 +63,9 @@ pub enum ServerMessage {
         room_id: String,
         site_id: u32,
         num_sites: usize,
+        filename: String,
+        /// Initial document content
+        document_content: String,
     },
 
     /// Joined room successfully
@@ -83,6 +108,24 @@ pub enum ServerMessage {
 
     /// Pong response to ping
     Pong,
+
+    /// Version saved successfully
+    VersionSaved { version: Version },
+
+    /// List of versions
+    VersionList { versions: Vec<Version> },
+
+    /// Version restored (contains content to apply)
+    VersionRestored { version: Version },
+
+    /// Version comparison diff
+    VersionDiff { diff: String },
+
+    /// Activity log events
+    ActivityLog { events: Vec<ActivityEvent> },
+
+    /// New activity event (broadcast)
+    ActivityEvent { event: ActivityEvent },
 }
 
 /// Internal message for server-side communication between tasks
