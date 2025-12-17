@@ -2,7 +2,7 @@
 # Multi-stage build for optimal size
 
 # Stage 1: Build
-FROM rust:1.85 AS builder
+FROM rust:1.88 AS builder
 
 WORKDIR /build
 

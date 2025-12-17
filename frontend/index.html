@@ -28,7 +28,7 @@
                     <h2>🔌 Connect</h2>
                     <div class="form-group">
                         <label>Server URL</label>
-                        <input type="text" id="serverUrl" value="ws://127.0.0.1:9001/ws">
+                        <input type="text" id="serverUrl" value="ws://34.135.102.212:9001/ws">
                     </div>
                     <button class="btn btn-primary" onclick="connect()">Connect</button>
                 </div>
@@ -36,7 +36,7 @@
                 <!-- Room Panel (hidden until connected) -->
                 <div id="roomPanel" class="hidden">
                     <h2>📁 Room</h2>
-                    
+
                     <div id="notInRoom">
                         <h3 style="font-size: 1rem; margin: 15px 0 10px; color: #aaa;">Create Room</h3>
                         <div class="form-group">
@@ -70,9 +70,9 @@
                             <div style="margin-bottom: 10px;">
                                 <strong style="color: #4db8ff;">Room ID:</strong>
                                 <div style="display: flex; align-items: center; gap: 8px; margin-top: 5px;">
-                                    <input type="text" id="currentRoomId" readonly 
+                                    <input type="text" id="currentRoomId" readonly
                                            style="flex: 1; background: #252540; border: 1px solid #444; color: #e0e0e0; padding: 8px; border-radius: 4px; font-family: monospace; font-size: 0.85rem;">
-                                    <button class="btn btn-secondary" onclick="copyRoomId()" 
+                                    <button class="btn btn-secondary" onclick="copyRoomId()"
                                             style="width: auto; padding: 8px 12px; margin: 0;" title="Copy Room ID">📋</button>
                                 </div>
                             </div>
@@ -81,7 +81,7 @@
                             </div>
                         </div>
                         <button class="btn btn-danger" onclick="leaveRoom()">Leave Room</button>
-                        
+
                         <div class="version-list">
                             <h3 style="font-size: 1rem; margin: 15px 0 10px; color: #aaa;">📜 Versions</h3>
                             <button class="btn btn-secondary" onclick="saveVersion()">Save Version</button>
@@ -103,10 +103,10 @@
                     <h2>📝 Document</h2>
                     <span class="room-info" id="documentInfo">Not in a room</span>
                 </div>
-                
-                <textarea 
-                    class="editor-area" 
-                    id="editor" 
+
+                <textarea
+                    class="editor-area"
+                    id="editor"
                     placeholder="Join or create a room to start editing..."
                     disabled
                 ></textarea>
