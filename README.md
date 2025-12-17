@@ -45,11 +45,30 @@ The core of your project should, ideally, be written in Rust. Depending on the p
 
 ## Questions
 - What is your project?
+    - Our project is a collaborative file sharing editor. It is a hosted file server where clients can
+      connect and edit in real-time together on multiple files.
 - What novel work did you do?
+    - We implemented conflict free replicated data time to handle real-time edits and collision resolution based on the latest research we found.
+      We integrated a custom TLS-style encryption protocol to ensure clients are provided with a measure of security.
 - What did you learn?
+    - We learned it is difficult to handle real-time simultaneous updates with collision resistant libraries.
+      It was hard for us to integrate encryption in our frontend to portray what was integrated in our backend, but
+      we managed to figure it out by using the same handshake protocol that the Rust server used, with a different
+      Javascript (@noble) crypto library.
 - What was challenging?
+  - Challenging parts of this project included:
+    - Finding a collision-resolution strategy for multiple updates at the same time
+    - Integrating our custom encryption protocol with our frontend
 - What AI tools did you use, and what did you use them for? What were their benefits and drawbacks?
+  - We used ChatGPT and ClaudeAI for various tasks including brainstorming, creating our company logo, as well as assisting with code generation
+  - We found them very useful for increasing developer efficiency by automating tedious tasks such as writing HTML or JavaScript.
+  - We also used them to generate Rust code as it is a syntactically difficult language, so these tools helped us connect the gap between what we conceptually wanted to do and the specific syntax to accomplish it.
+  - The increase in developer efficiency was definitely a benefit.
+  - However, a drawback was that ChatGPT and Claude often make mistakes that are difficult to debug, so that takes some time, but they were still time-savers overall. 
 - What would you do differently next time?
+  - If we were to do it all over, we would probably try to create less coupling between the frontend and backend.
+  - Additionally, it would be a fun extention to add certificate verification to the TLS-style encryption protocol we made.
+  - Other possible extentions we could add include having the ability to upload a starting document.
 
 ## What to submit
 - Push your working code to the main branch of your team's GitHub Repository before the deadline
