@@ -141,10 +141,11 @@ impl Database {
     pub async fn add_user(&self, user_id: &str, room_id: &str, site_id: u32) -> Result<()> {
         let now = chrono::Utc::now().to_rfc3339();
 
-        // Use INSERT OR REPLACE to handle reconnections gracefully
+        // MySQL: Use REPLACE INTO to handle reconnections gracefully
+        // Note: REPLACE INTO deletes the old row and inserts a new one
         sqlx::query(
             r#"
-            INSERT OR REPLACE INTO users (id, room_id, site_id, connected_at)
+            REPLACE INTO users (id, room_id, site_id, connected_at)
             VALUES (?, ?, ?, ?)
             "#,
         )
@@ -267,7 +268,7 @@ mod tests {
     async fn test_database_operations() {
         let db_url = std::env::var("DATABASE_URL")
             .unwrap_or_else(|_| "mysql://root:password@127.0.0.1:3307/bearshare".to_string());
-        
+
         let db = Database::new(&db_url).await.unwrap();
 
         let room_id = Uuid::new_v4().to_string();
