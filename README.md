@@ -1,6 +1,36 @@
 [![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/L_j-PnAY)
 Goal: Apply the knowledge you've learned in new ways.
 
+# Running the Project
+
+<details>
+  <summary>Containerize the Server and Database</summary>
+
+  1. Build the database first
+     ```bash
+     docker compose -f docker/local.docker-compose.yml up db -d --build
+     ```
+
+  1. Build the server
+     ```bash
+     docker compose -f docker/ci.docker-compose.yml up server -d --build
+     ```
+
+  1. Run the frontend
+     ```bash
+     cd frontend
+     python3 -m http.server 8000
+     ```
+
+     Navigate to `http://localhost:8080`
+
+  1. Cleaning up
+     ```bash
+     docker compose -f docker/ci.docker-compose.yml down server -v
+     docker compose -f docker/local.docker-compose.yml down db -v
+     ```
+</details>
+
 # Project description
 This is an open-ended project. Students can extend their BearTV project or do something new from the ground up. Project ideas must be approved by Dr. Freeman.
 
@@ -64,7 +94,7 @@ The core of your project should, ideally, be written in Rust. Depending on the p
   - We found them very useful for increasing developer efficiency by automating tedious tasks such as writing HTML or JavaScript.
   - We also used them to generate Rust code as it is a syntactically difficult language, so these tools helped us connect the gap between what we conceptually wanted to do and the specific syntax to accomplish it.
   - The increase in developer efficiency was definitely a benefit.
-  - However, a drawback was that ChatGPT and Claude often make mistakes that are difficult to debug, so that takes some time, but they were still time-savers overall. 
+  - However, a drawback was that ChatGPT and Claude often make mistakes that are difficult to debug, so that takes some time, but they were still time-savers overall.
 - What would you do differently next time?
   - If we were to do it all over, we would probably try to create less coupling between the frontend and backend.
   - Additionally, it would be a fun extention to add certificate verification to the TLS-style encryption protocol we made.
