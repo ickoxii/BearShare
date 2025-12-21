@@ -1,6 +1,15 @@
 version: '3.8'
 
 services:
+  frontend:
+    image: python:3.11.14-alpine3.23
+    build:
+      context: ..
+      dockerfile: docker/bearshare-frontend.Dockerfile
+    restart: always
+    ports:
+      - '3000:3000'
+
   # MySQL database for local development
   db:
     image: mysql:8.4.2
