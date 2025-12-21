@@ -176,7 +176,7 @@ impl Database {
             .context("Failed to remove user")?;
 
         // Decrement active users count
-        sqlx::query("UPDATE rooms SET active_users = MAX(0, active_users - 1) WHERE id = ?")
+        sqlx::query("UPDATE rooms SET active_users = GREATEST(0, active_users - 1) WHERE id = ?")
             .bind(room_id)
             .execute(&self.pool)
             .await
