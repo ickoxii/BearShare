@@ -6,7 +6,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-const CHECKPOINT_THRESHOLD: usize = 1;
+const CHECKPOINT_THRESHOLD: usize = 100;
 
 // Document being collaboratively edited
 #[derive(Debug)]

@@ -28,3 +28,5 @@ Cargo.lock
 .idea/
 .vscode/
 bearshare.db
+.env
+node_modules/

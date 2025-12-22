@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # MySQL Database for local development
+  db:
+    image: mysql:8.4.2
+    command: --mysql-native-password=ON
+    restart: always
+    ports:
+      - '3307:3306'
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: bearshare
+      MYSQL_TCP_PORT: 3306
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-ppassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bearshare-network
+
+  # BearShare web app
+  frontend:
+    image: bearshare-frontend
+    build:
+      context: ../..
+      dockerfile: docker/local/bearshare-frontend.Dockerfile
+    restart: always
+    ports:
+      - '3000:3000'
+
+  # BearShare WebSocket Server
+  server:
+    image: bearshare-server
+    build:
+      context: ../..
+      dockerfile: docker/local/bearshare-server.Dockerfile
+    restart: always
+    ports:
+      - '9001:9001'
+    environment:
+      DATABASE_URL: mysql://root:password@db:3306/bearshare
+      BIND_ADDR: 0.0.0.0:9001
+      FILE_STORE_PATH: /app/file_store
+      RUST_LOG: info,server=debug
+    volumes:
+      - file-store-data:/app/file_store
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - bearshare-network
+
+volumes:
+  mysql-data:
+    driver: local
+  file-store-data:
+    driver: local
+
+networks:
+  bearshare-network:
+    driver: bridge
