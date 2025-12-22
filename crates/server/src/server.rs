@@ -5,6 +5,7 @@ use crate::document::Document;
 use crate::features::{AuditLog, VersionStore};
 use crate::file_store::{FileStore, StoredDocument};
 use crate::room::{Room, SharedRoom};
+use crate::secure_channel;
 use anyhow::{anyhow, Context, Result};
 use axum::{
     extract::{
@@ -20,10 +21,9 @@ use protocol::messages::{ClientMessage, ServerMessage};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock, Mutex};
+use tokio::sync::{mpsc, Mutex, RwLock};
 use tower_http::cors::{Any, CorsLayer};
 use uuid::Uuid;
-use crate::secure_channel;
 
 // Server state shared across connections
 #[derive(Clone)]
@@ -272,7 +272,11 @@ async fn handle_socket(socket: WebSocket, state: ServerState) {
                 }
             };
 
-            if sender.send(Message::Binary(ciphertext.into())).await.is_err() {
+            if sender
+                .send(Message::Binary(ciphertext.into()))
+                .await
+                .is_err()
+            {
                 break;
             }
         }
@@ -299,17 +303,25 @@ async fn handle_socket(socket: WebSocket, state: ServerState) {
 
                 match serde_json::from_slice::<ClientMessage>(&plaintext) {
                     Ok(client_msg) => {
-                        if let Err(e) =
-                            handle_client_message(&state, client_id, &tx, client_msg, &mut current_room).await
+                        if let Err(e) = handle_client_message(
+                            &state,
+                            client_id,
+                            &tx,
+                            client_msg,
+                            &mut current_room,
+                        )
+                        .await
                         {
                             tracing::error!("Error handling message: {}", e);
-                            let _ = tx.send(ServerMessage::Error { message: e.to_string() });
+                            let _ = tx.send(ServerMessage::Error {
+                                message: e.to_string(),
+                            });
                         }
                     }
                     Err(e) => {
                         tracing::error!("Failed to parse decrypted ClientMessage: {}", e);
                         let _ = tx.send(ServerMessage::Error {
-                            message: format!("Invalid message format: {}", e),
+                            message: format!("Invalid message format: {e}"),
                         });
                     }
                 }
@@ -331,8 +343,6 @@ async fn handle_socket(socket: WebSocket, state: ServerState) {
     send_task.abort();
     tracing::info!("WebSocket connection closed: {}", client_id);
 }
-
-
 
 // Handle a client message
 async fn handle_client_message(
@@ -664,14 +674,14 @@ async fn handle_client_message(
                             Some(room_id.clone()),
                             None,
                             "restore_version",
-                            Some(format!("Restored to version {}", seq)),
+                            Some(format!("Restored to version {seq}")),
                         )
                         .await?;
 
                     tx.send(ServerMessage::VersionRestored { version })?;
                 } else {
                     tx.send(ServerMessage::Error {
-                        message: format!("Version {} not found", seq),
+                        message: format!("Version {seq} not found"),
                     })?;
                 }
             }

@@ -84,18 +84,18 @@ impl SecureRead {
             bail!("record too short");
         }
 
-        if &frame[0..4] != REC_MAGIC {
+        if frame[0..4] != REC_MAGIC {
             bail!("bad record magic");
         }
 
         let version = u16::from_be_bytes([frame[4], frame[5]]);
         if version != VERSION {
-            bail!("unsupported record version: {}", version);
+            bail!("unsupported record version: {version}");
         }
 
         let rec_type = frame[6];
         if rec_type != REC_APPLICATION_DATA {
-            bail!("unexpected record type: {}", rec_type);
+            bail!("unexpected record type: {rec_type}");
         }
 
         let seq = u64::from_be_bytes(frame[7..15].try_into().unwrap());
@@ -170,7 +170,7 @@ where
     sender
         .send(Message::Binary(ch_bytes.clone().into()))
         .await
-        .map_err(|e| anyhow!("failed to send ClientHello: {}", e))?;
+        .map_err(|e| anyhow!("failed to send ClientHello: {e}"))?;
 
     // Receive ServerHello
     let (sh_type, sh_payload, sh_bytes) = recv_handshake_frame(receiver)
@@ -178,7 +178,7 @@ where
         .context("waiting for ServerHello")?;
 
     if sh_type != HS_SERVER_HELLO {
-        bail!("expected ServerHello, got hs_type={}", sh_type);
+        bail!("expected ServerHello, got hs_type={sh_type}");
     }
     if sh_payload.len() != 64 {
         bail!("ServerHello payload wrong size");
@@ -207,7 +207,7 @@ where
     sender
         .send(Message::Binary(cf_bytes.clone().into()))
         .await
-        .map_err(|e| anyhow!("failed to send ClientFinished: {}", e))?;
+        .map_err(|e| anyhow!("failed to send ClientFinished: {e}"))?;
 
     transcript.extend_from_slice(&cf_bytes);
 
@@ -218,7 +218,7 @@ where
 
     if sf_type != HS_SERVER_FINISHED {
         handshake_key.zeroize();
-        bail!("expected ServerFinished, got hs_type={}", sf_type);
+        bail!("expected ServerFinished, got hs_type={sf_type}");
     }
     if sf_payload.len() != 32 {
         handshake_key.zeroize();
@@ -249,14 +249,12 @@ where
 
     // Client writes with c2s key, reads with s2c key
     let write = SecureWrite {
-        cipher: ChaCha20Poly1305::new_from_slice(&c2s_key)
-            .map_err(|_| anyhow!("bad c2s key"))?,
+        cipher: ChaCha20Poly1305::new_from_slice(&c2s_key).map_err(|_| anyhow!("bad c2s key"))?,
         send_seq: 0,
     };
 
     let read = SecureRead {
-        cipher: ChaCha20Poly1305::new_from_slice(&s2c_key)
-            .map_err(|_| anyhow!("bad s2c key"))?,
+        cipher: ChaCha20Poly1305::new_from_slice(&s2c_key).map_err(|_| anyhow!("bad s2c key"))?,
         recv_seq: 0,
     };
 
@@ -275,7 +273,7 @@ where
         .next()
         .await
         .ok_or_else(|| anyhow!("socket closed during handshake"))?
-        .map_err(|e| anyhow!("ws receive error during handshake: {}", e))?;
+        .map_err(|e| anyhow!("ws receive error during handshake: {e}"))?;
 
     let Message::Binary(bytes) = msg else {
         bail!("expected Binary handshake frame");
@@ -300,12 +298,12 @@ fn decode_handshake_frame(frame: &[u8]) -> Result<(u8, Vec<u8>)> {
     if frame.len() < HS_HEADER_LEN {
         bail!("handshake frame too short");
     }
-    if &frame[0..4] != HS_MAGIC {
+    if frame[0..4] != HS_MAGIC {
         bail!("bad handshake magic");
     }
     let version = u16::from_be_bytes([frame[4], frame[5]]);
     if version != VERSION {
-        bail!("unsupported handshake version: {}", version);
+        bail!("unsupported handshake version: {version}");
     }
     let hs_type = frame[6];
     let payload_len = u32::from_be_bytes(frame[7..11].try_into().unwrap()) as usize;

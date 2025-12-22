@@ -26,7 +26,7 @@ pub struct Rga<T: Clone> {
     session: u32,
     vector_clock: Vec<u32>,
 
-    // Cemetery for tombstone management 
+    // Cemetery for tombstone management
     cemetery: Vec<S4Vector>,
 }
 
@@ -81,7 +81,7 @@ impl<T: Clone> Rga<T> {
         self.hash_map.get(s4v).cloned()
     }
 
-    // Local Insert operation 
+    // Local Insert operation
     // Returns RemoteOp for broadcasting
     pub fn insert_local(&mut self, index: usize, value: T) -> Option<RemoteOp<T>> {
         let s4v = self.generate_s4vector();
@@ -103,7 +103,7 @@ impl<T: Clone> Rga<T> {
         })
     }
 
-    // Local Delete operation 
+    // Local Delete operation
     pub fn delete_local(&mut self, index: usize) -> Option<RemoteOp<T>> {
         let target = self.find_by_index(index)?;
         let target_id = target.borrow().s_k;
@@ -123,7 +123,7 @@ impl<T: Clone> Rga<T> {
         })
     }
 
-    // Local Update operation 
+    // Local Update operation
     pub fn update_local(&mut self, index: usize, value: T) -> Option<RemoteOp<T>> {
         let target = self.find_by_index(index)?;
         let target_id = target.borrow().s_k;
@@ -197,7 +197,7 @@ impl<T: Clone> Rga<T> {
         }
     }
 
-    // Remote Insert operation 
+    // Remote Insert operation
     fn remote_insert(&mut self, left_id: Option<S4Vector>, value: T, s4v: S4Vector) {
         let new_node = Rc::new(RefCell::new(Node::new(value, s4v)));
 
@@ -271,11 +271,11 @@ impl<T: Clone> Rga<T> {
             }
         }
 
-        // Add to hash map 
+        // Add to hash map
         self.hash_map.insert(s4v, new_node);
     }
 
-    /// Remote Delete operation 
+    /// Remote Delete operation
     /// Delete always wins regardless of s4vector order
     fn remote_delete(&mut self, target_id: S4Vector, s4v: S4Vector) {
         if let Some(target) = self.find_by_s4vector(&target_id) {
@@ -293,13 +293,13 @@ impl<T: Clone> Rga<T> {
         }
     }
 
-    /// Remote Update operation 
+    /// Remote Update operation
     /// Update only succeeds if s4v succeeds current s_p AND target is not tombstone
     fn remote_update(&mut self, target_id: S4Vector, value: T, s4v: S4Vector) {
         if let Some(target) = self.find_by_s4vector(&target_id) {
             let mut target_mut = target.borrow_mut();
 
-            // Don't update tombstones 
+            // Don't update tombstones
             if target_mut.is_tombstone() {
                 return;
             }
@@ -410,7 +410,7 @@ mod tests {
 
         // Based on S4Vector ordering: site 0 < site 1 < site 2
         // Higher priority (later in order) goes closer to left cobject
-        println!("Converged result: {:?}", result0);
+        println!("Converged result: {result0:#?}");
     }
 
     #[test]

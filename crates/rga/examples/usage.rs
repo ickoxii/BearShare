@@ -20,6 +20,9 @@ fn main() {
 
     // Example 5: Vector clock propagation
     example_vector_clock_propagation();
+
+    // Example 6: Demonstrate serialization/deserialization
+    demonstrate_serialization();
 }
 
 fn example_single_site() {
@@ -202,7 +205,7 @@ fn example_vector_clock_propagation() {
 
     // Inspect vector clock in operation
     if let RemoteOp::Insert { vector_clock, .. } = &op_b {
-        println!("  Site 0's vector clock after 'b': {:?}", vector_clock);
+        println!("  Site 0's vector clock after 'b': {vector_clock:?}");
         println!("  Meaning: Site 0 has performed 2 operations, others have 0");
     }
 
@@ -220,12 +223,12 @@ fn example_vector_clock_propagation() {
     let op_2 = site2.insert_local(1, '2').unwrap();
 
     if let RemoteOp::Insert { vector_clock, .. } = &op_1 {
-        println!("  Site 1's vector clock: {:?}", vector_clock);
+        println!("  Site 1's vector clock: {vector_clock:?}");
         println!("    [0]=2 (from Site 0), [1]=1 (own operation), [2]=0");
     }
 
     if let RemoteOp::Insert { vector_clock, .. } = &op_2 {
-        println!("  Site 2's vector clock: {:?}", vector_clock);
+        println!("  Site 2's vector clock: {vector_clock:?}");
         println!("    [0]=2 (from Site 0), [1]=0, [2]=1 (own operation)");
     }
 
@@ -263,9 +266,10 @@ fn demonstrate_serialization() {
 
     // Serialize to JSON for network transmission
     let json = serde_json::to_string(&op).unwrap();
-    println!("Serialized operation: {}", json);
+    println!("Serialized operation: {json}");
 
     // Deserialize
     let deserialized: RemoteOp<String> = serde_json::from_str(&json).unwrap();
     println!("Deserialized successfully");
+    println!("Deserialized operation: {deserialized:#?}");
 }

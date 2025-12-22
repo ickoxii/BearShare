@@ -78,29 +78,25 @@ impl SecureRead {
             bail!("record too short");
         }
 
-        if &frame[0..4] != REC_MAGIC {
+        if frame[0..4] != REC_MAGIC {
             bail!("bad record magic");
         }
 
         let version = u16::from_be_bytes([frame[4], frame[5]]);
         if version != VERSION {
-            bail!("unsupported record version: {}", version);
+            bail!("unsupported record version: {version}");
         }
 
         let rec_type = frame[6];
         if rec_type != REC_APPLICATION_DATA {
-            bail!("unexpected record type: {}", rec_type);
+            bail!("unexpected record type: {rec_type}");
         }
 
         let seq = u64::from_be_bytes(frame[7..15].try_into().unwrap());
         let plaintext_len = u32::from_be_bytes(frame[15..19].try_into().unwrap()) as usize;
 
         if seq != self.recv_seq {
-            bail!(
-                "unexpected recv seq: got {}, expected {}",
-                seq,
-                self.recv_seq
-            );
+            bail!("unexpected recv seq: got {seq}, expected {}", self.recv_seq);
         }
         self.recv_seq = self
             .recv_seq
@@ -146,11 +142,12 @@ where
     R: Stream<Item = std::result::Result<Message, E>> + Unpin,
     E: std::error::Error + Send + Sync + 'static,
 {
-    let (ch_type, ch_payload, ch_bytes) =
-        recv_handshake_frame(receiver).await.context("waiting for ClientHello")?;
+    let (ch_type, ch_payload, ch_bytes) = recv_handshake_frame(receiver)
+        .await
+        .context("waiting for ClientHello")?;
 
     if ch_type != HS_CLIENT_HELLO {
-        bail!("expected ClientHello, got hs_type={}", ch_type);
+        bail!("expected ClientHello, got hs_type={ch_type}");
     }
     if ch_payload.len() != 64 {
         bail!("ClientHello payload wrong size");
@@ -178,7 +175,7 @@ where
     sender
         .send(Message::Binary(sh_bytes.clone().into()))
         .await
-        .map_err(|e| anyhow!("failed to send ServerHello: {}", e))?;
+        .map_err(|e| anyhow!("failed to send ServerHello: {e}"))?;
 
     let mut transcript = Vec::new();
     transcript.extend_from_slice(&ch_bytes);
@@ -193,7 +190,7 @@ where
 
     if cf_type != HS_CLIENT_FINISHED {
         handshake_key.zeroize();
-        bail!("expected ClientFinished, got hs_type={}", cf_type);
+        bail!("expected ClientFinished, got hs_type={cf_type}");
     }
     if cf_payload.len() != 32 {
         handshake_key.zeroize();
@@ -217,7 +214,7 @@ where
     sender
         .send(Message::Binary(sf_bytes.clone().into()))
         .await
-        .map_err(|e| anyhow!("failed to send ServerFinished: {}", e))?;
+        .map_err(|e| anyhow!("failed to send ServerFinished: {e}"))?;
 
     transcript.extend_from_slice(&sf_bytes);
 
@@ -231,14 +228,12 @@ where
     handshake_key.zeroize();
 
     let write = SecureWrite {
-        cipher: ChaCha20Poly1305::new_from_slice(&s2c_key)
-            .map_err(|_| anyhow!("bad s2c key"))?,
+        cipher: ChaCha20Poly1305::new_from_slice(&s2c_key).map_err(|_| anyhow!("bad s2c key"))?,
         send_seq: 0,
     };
 
     let read = SecureRead {
-        cipher: ChaCha20Poly1305::new_from_slice(&c2s_key)
-            .map_err(|_| anyhow!("bad c2s key"))?,
+        cipher: ChaCha20Poly1305::new_from_slice(&c2s_key).map_err(|_| anyhow!("bad c2s key"))?,
         recv_seq: 0,
     };
 
@@ -257,7 +252,7 @@ where
         .next()
         .await
         .ok_or_else(|| anyhow!("socket closed during handshake"))?
-        .map_err(|e| anyhow!("ws receive error during handshake: {}", e))?;
+        .map_err(|e| anyhow!("ws receive error during handshake: {e}"))?;
 
     let Message::Binary(bytes) = msg else {
         bail!("expected Binary handshake frame");
@@ -282,12 +277,12 @@ fn decode_handshake_frame(frame: &[u8]) -> Result<(u8, Vec<u8>)> {
     if frame.len() < HS_HEADER_LEN {
         bail!("handshake frame too short");
     }
-    if &frame[0..4] != HS_MAGIC {
+    if frame[0..4] != HS_MAGIC {
         bail!("bad handshake magic");
     }
     let version = u16::from_be_bytes([frame[4], frame[5]]);
     if version != VERSION {
-        bail!("unsupported handshake version: {}", version);
+        bail!("unsupported handshake version: {version}");
     }
     let hs_type = frame[6];
     let payload_len = u32::from_be_bytes(frame[7..11].try_into().unwrap()) as usize;

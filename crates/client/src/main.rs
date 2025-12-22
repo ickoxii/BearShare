@@ -6,7 +6,7 @@ mod secure_channel;
 use anyhow::{Context, Result};
 use futures_util::{SinkExt, StreamExt};
 use rga::RemoteOp;
-use secure_channel::{client_handshake, SecureRead, SecureWrite};
+use secure_channel::client_handshake;
 use serde::{Deserialize, Serialize};
 use std::io::{self, Write};
 use std::sync::Arc;
@@ -30,37 +30,57 @@ pub enum ClientMessage {
     },
 
     // Join an existing room
-    JoinRoom { room_id: String, password: String },
+    JoinRoom {
+        room_id: String,
+        password: String,
+    },
 
     // Leave the current room
     LeaveRoom,
 
     // Send a CRDT operation (legacy)
-    Operation { op: RemoteOp<char> },
+    Operation {
+        op: RemoteOp<char>,
+    },
 
     // Insert text at a position (client-friendly)
-    Insert { position: usize, text: String },
+    Insert {
+        position: usize,
+        text: String,
+    },
 
     // Delete text at a position (client-friendly)
-    Delete { position: usize, length: usize },
+    Delete {
+        position: usize,
+        length: usize,
+    },
 
     // Request current document state
     RequestSync,
 
     // Save a version snapshot
-    SaveVersion { author: Option<String> },
+    SaveVersion {
+        author: Option<String>,
+    },
 
     // List all versions for the current document
     ListVersions,
 
     // Restore a specific version
-    RestoreVersion { seq: u64 },
+    RestoreVersion {
+        seq: u64,
+    },
 
     // Compare two versions
-    CompareVersions { a_seq: u64, b_seq: u64 },
+    CompareVersions {
+        a_seq: u64,
+        b_seq: u64,
+    },
 
     // Get recent activity/audit log
-    GetActivityLog { limit: Option<usize> },
+    GetActivityLog {
+        limit: Option<usize>,
+    },
 
     // Heartbeat/ping
     Ping,
@@ -90,13 +110,22 @@ pub enum ServerMessage {
     },
 
     // Another user joined the room
-    UserJoined { user_id: String, site_id: u32 },
+    UserJoined {
+        user_id: String,
+        site_id: u32,
+    },
 
     // Another user left the room
-    UserLeft { user_id: String, site_id: u32 },
+    UserLeft {
+        user_id: String,
+        site_id: u32,
+    },
 
     // Incoming CRDT operation from another client
-    Operation { from_site: u32, op: RemoteOp<char> },
+    Operation {
+        from_site: u32,
+        op: RemoteOp<char>,
+    },
 
     // Document checkpoint reached
     Checkpoint {
@@ -111,28 +140,42 @@ pub enum ServerMessage {
     },
 
     // Error message
-    Error { message: String },
+    Error {
+        message: String,
+    },
 
     // Pong response to ping
     Pong,
 
     // Version saved successfully
-    VersionSaved { version: Version },
+    VersionSaved {
+        version: Version,
+    },
 
     // List of versions
-    VersionList { versions: Vec<Version> },
+    VersionList {
+        versions: Vec<Version>,
+    },
 
     // Version restored (contains content to apply)
-    VersionRestored { version: Version },
+    VersionRestored {
+        version: Version,
+    },
 
     // Version comparison diff
-    VersionDiff { diff: String },
+    VersionDiff {
+        diff: String,
+    },
 
     // Activity log events
-    ActivityLog { events: Vec<ActivityEvent> },
+    ActivityLog {
+        events: Vec<ActivityEvent>,
+    },
 
     // New activity event (broadcast)
-    ActivityEvent { event: ActivityEvent },
+    ActivityEvent {
+        event: ActivityEvent,
+    },
 }
 
 // A saved version entry for a document
@@ -207,13 +250,13 @@ impl ClientState {
         match op {
             RemoteOp::Insert { value, .. } => {
                 // We can't know the exact position without the full CRDT state
-                println!("[remote] Insert: '{}'", value);
+                println!("[remote] Insert: '{value}'");
             }
             RemoteOp::Delete { .. } => {
                 println!("[remote] Delete operation");
             }
             RemoteOp::Update { value, .. } => {
-                println!("[remote] Update: '{}'", value);
+                println!("[remote] Update: '{value}'");
             }
         }
     }
@@ -230,7 +273,7 @@ async fn main() -> Result<()> {
     println!("║           BearShare - Collaborative Editor Client            ║");
     println!("╚══════════════════════════════════════════════════════════════╝");
     println!();
-    println!("Connecting to server at {}...", server_url);
+    println!("Connecting to server at {server_url}...");
 
     // Connect to WebSocket server
     let (ws_stream, _) = connect_async(&server_url)
@@ -272,7 +315,7 @@ async fn main() -> Result<()> {
                     }
                 }
                 Err(e) => {
-                    eprintln!("[error] Encryption failed: {}", e);
+                    eprintln!("[error] Encryption failed: {e}");
                     break;
                 }
             }
@@ -287,25 +330,21 @@ async fn main() -> Result<()> {
             if let Message::Binary(data) = msg {
                 let mut reader = secure_read_clone.lock().await;
                 match reader.decrypt(&data) {
-                    Ok(plaintext) => {
-                        match String::from_utf8(plaintext) {
-                            Ok(text) => {
-                                match serde_json::from_str::<ServerMessage>(&text) {
-                                    Ok(server_msg) => {
-                                        handle_server_message(&state_for_recv, server_msg).await;
-                                    }
-                                    Err(e) => {
-                                        println!("[error] Failed to parse server message: {}", e);
-                                    }
-                                }
+                    Ok(plaintext) => match String::from_utf8(plaintext) {
+                        Ok(text) => match serde_json::from_str::<ServerMessage>(&text) {
+                            Ok(server_msg) => {
+                                handle_server_message(&state_for_recv, server_msg).await;
                             }
                             Err(e) => {
-                                println!("[error] Invalid UTF-8 in message: {}", e);
+                                println!("[error] Failed to parse server message: {e}");
                             }
+                        },
+                        Err(e) => {
+                            println!("[error] Invalid UTF-8 in message: {e}");
                         }
-                    }
+                    },
                     Err(e) => {
-                        println!("[error] Decryption failed: {}", e);
+                        println!("[error] Decryption failed: {e}");
                     }
                 }
             }
@@ -345,13 +384,13 @@ async fn main() -> Result<()> {
 
             "create" | "c" => {
                 if let Err(e) = handle_create_command(args, &msg_tx).await {
-                    println!("[error] {}", e);
+                    println!("[error] {e}");
                 }
             }
 
             "join" | "j" => {
                 if let Err(e) = handle_join_command(args, &msg_tx).await {
-                    println!("[error] {}", e);
+                    println!("[error] {e}");
                 }
             }
 
@@ -365,13 +404,13 @@ async fn main() -> Result<()> {
 
             "insert" | "i" => {
                 if let Err(e) = handle_insert_command(args, &state, &msg_tx).await {
-                    println!("[error] {}", e);
+                    println!("[error] {e}");
                 }
             }
 
             "delete" | "d" => {
                 if let Err(e) = handle_delete_command(args, &state, &msg_tx).await {
-                    println!("[error] {}", e);
+                    println!("[error] {e}");
                 }
             }
 
@@ -415,7 +454,7 @@ async fn main() -> Result<()> {
                     println!("[error] Usage: restore <version_seq>");
                 } else if let Ok(seq) = args.parse::<u64>() {
                     msg_tx.send(ClientMessage::RestoreVersion { seq }).ok();
-                    println!("[info] Restoring version {}...", seq);
+                    println!("[info] Restoring version {seq}...");
                 } else {
                     println!("[error] Invalid version number");
                 }
@@ -429,7 +468,7 @@ async fn main() -> Result<()> {
                     msg_tx
                         .send(ClientMessage::CompareVersions { a_seq: a, b_seq: b })
                         .ok();
-                    println!("[info] Comparing versions {} and {}...", a, b);
+                    println!("[info] Comparing versions {a} and {b}...");
                 } else {
                     println!("[error] Invalid version numbers");
                 }
@@ -466,10 +505,7 @@ async fn main() -> Result<()> {
             }
 
             _ => {
-                println!(
-                    "[error] Unknown command '{}'. Type 'help' for available commands.",
-                    cmd
-                );
+                println!("[error] Unknown command '{cmd}'. Type 'help' for available commands.");
             }
         }
     }
@@ -527,11 +563,11 @@ async fn handle_create_command(
     msg_tx.send(ClientMessage::CreateRoom {
         room_name: room_name.clone(),
         password,
-        filename: format!("{}.txt", room_name),
+        filename: room_name.clone(),
         initial_content,
     })?;
 
-    println!("[info] Creating room '{}'...", room_name);
+    println!("[info] Creating room '{room_name}'...");
     Ok(())
 }
 
@@ -553,7 +589,7 @@ async fn handle_join_command(
         password,
     })?;
 
-    println!("[info] Joining room {}...", room_id);
+    println!("[info] Joining room {room_id}...");
     Ok(())
 }
 
@@ -588,7 +624,7 @@ async fn handle_insert_command(
         text: text.clone(),
     })?;
 
-    println!("[local] Inserted '{}' at position {}", text, pos);
+    println!("[local] Inserted '{text}' at position {pos}");
 
     Ok(())
 }
@@ -626,7 +662,7 @@ async fn handle_delete_command(
         length: len,
     })?;
 
-    println!("[local] Deleted {} chars at position {}", len, pos);
+    println!("[local] Deleted {len} chars at position {pos}");
 
     Ok(())
 }
@@ -652,9 +688,9 @@ async fn handle_server_message(state: &Arc<Mutex<ClientState>>, msg: ServerMessa
             println!("╔══════════════════════════════════════════════════════════════╗");
             println!("║                     Room Created Successfully                ║");
             println!("╠══════════════════════════════════════════════════════════════╣");
-            println!("║  Room ID:  {:<49} ║", room_id);
-            println!("║  Site ID:  {:<49} ║", site_id);
-            println!("║  Filename: {:<49} ║", filename);
+            println!("║  Room ID:  {room_id:<49} ║");
+            println!("║  Site ID:  {site_id:<49} ║");
+            println!("║  Filename: {filename:<49} ║");
             println!("╠══════════════════════════════════════════════════════════════╣");
             println!("║  Document Content:                                           ║");
             println!("╟──────────────────────────────────────────────────────────────╢");
@@ -662,7 +698,7 @@ async fn handle_server_message(state: &Arc<Mutex<ClientState>>, msg: ServerMessa
                 println!("║  (empty document)                                            ║");
             } else {
                 for line in document_content.lines() {
-                    println!("║  {:<60} ║", line);
+                    println!("║  {line:<60} ║");
                 }
             }
             println!("╚══════════════════════════════════════════════════════════════╝");
@@ -690,9 +726,9 @@ async fn handle_server_message(state: &Arc<Mutex<ClientState>>, msg: ServerMessa
             println!("╔══════════════════════════════════════════════════════════════╗");
             println!("║                      Joined Room Successfully                ║");
             println!("╠══════════════════════════════════════════════════════════════╣");
-            println!("║  Room ID:  {:<49} ║", room_id);
-            println!("║  Site ID:  {:<49} ║", site_id);
-            println!("║  Filename: {:<49} ║", filename);
+            println!("║  Room ID:  {room_id:<49} ║");
+            println!("║  Site ID:  {site_id:<49} ║");
+            println!("║  Filename: {filename:<49} ║");
             println!("╠══════════════════════════════════════════════════════════════╣");
             println!("║  Document Content:                                           ║");
             println!("╟──────────────────────────────────────────────────────────────╢");
@@ -700,7 +736,7 @@ async fn handle_server_message(state: &Arc<Mutex<ClientState>>, msg: ServerMessa
                 println!("║  (empty document)                                            ║");
             } else {
                 for line in document_content.lines() {
-                    println!("║  {:<60} ║", line);
+                    println!("║  {line:<60} ║");
                 }
             }
             println!("╚══════════════════════════════════════════════════════════════╝");
@@ -716,7 +752,7 @@ async fn handle_server_message(state: &Arc<Mutex<ClientState>>, msg: ServerMessa
                 &user_id
             };
             println!();
-            println!("[info] User {} joined (site {})", display_id, site_id);
+            println!("[info] User {display_id} joined (site {site_id})");
             print!("> ");
             io::stdout().flush().ok();
         }
@@ -728,7 +764,7 @@ async fn handle_server_message(state: &Arc<Mutex<ClientState>>, msg: ServerMessa
                 &user_id
             };
             println!();
-            println!("[info] User {} left (site {})", display_id, site_id);
+            println!("[info] User {display_id} left (site {site_id})");
             print!("> ");
             io::stdout().flush().ok();
         }
@@ -737,7 +773,7 @@ async fn handle_server_message(state: &Arc<Mutex<ClientState>>, msg: ServerMessa
             let mut state_guard = state.lock().await;
             state_guard.apply_remote_op(&op);
             println!();
-            println!("[remote] Operation from site {}", from_site);
+            println!("[remote] Operation from site {from_site}");
             println!("[info] Use 'sync' to update document view");
             print!("> ");
             io::stdout().flush().ok();
@@ -750,8 +786,8 @@ async fn handle_server_message(state: &Arc<Mutex<ClientState>>, msg: ServerMessa
             let mut state_guard = state.lock().await;
             state_guard.content = document_content.clone();
             println!();
-            println!("[info] Checkpoint: {} operations applied", ops_applied);
-            println!("[info] Document: {}", document_content);
+            println!("[info] Checkpoint: {ops_applied} operations applied");
+            println!("[info] Document: {document_content}");
             print!("> ");
             io::stdout().flush().ok();
         }
@@ -764,14 +800,14 @@ async fn handle_server_message(state: &Arc<Mutex<ClientState>>, msg: ServerMessa
             state_guard.content = document_content.clone();
             println!();
             println!("[sync] Document updated from server");
-            println!("[sync] Content: {}", document_content);
+            println!("[sync] Content: {document_content}");
             print!("> ");
             io::stdout().flush().ok();
         }
 
         ServerMessage::Error { message } => {
             println!();
-            println!("[error] Server error: {}", message);
+            println!("[error] Server error: {message}");
             print!("> ");
             io::stdout().flush().ok();
         }
@@ -789,8 +825,14 @@ async fn handle_server_message(state: &Arc<Mutex<ClientState>>, msg: ServerMessa
             println!("║                      Version Saved                           ║");
             println!("╠══════════════════════════════════════════════════════════════╣");
             println!("║  Version:  {:<49} ║", version.seq);
-            println!("║  Author:   {:<49} ║", version.author.as_deref().unwrap_or("(anonymous)"));
-            println!("║  Time:     {:<49} ║", version.timestamp.format("%Y-%m-%d %H:%M:%S"));
+            println!(
+                "║  Author:   {:<49} ║",
+                version.author.as_deref().unwrap_or("(anonymous)")
+            );
+            println!(
+                "║  Time:     {:<49} ║",
+                version.timestamp.format("%Y-%m-%d %H:%M:%S")
+            );
             println!("╚══════════════════════════════════════════════════════════════╝");
             print!("> ");
             io::stdout().flush().ok();
@@ -832,11 +874,13 @@ async fn handle_server_message(state: &Arc<Mutex<ClientState>>, msg: ServerMessa
             println!("║  Content:                                                    ║");
             println!("╟──────────────────────────────────────────────────────────────╢");
             for line in version.content.lines().take(5) {
-                println!("║  {:<60} ║", line);
+                println!("║  {line:<60} ║");
             }
             if version.content.lines().count() > 5 {
-                println!("║  ... ({} more lines)                                         ║", 
-                    version.content.lines().count() - 5);
+                println!(
+                    "║  ... ({} more lines)                                         ║",
+                    version.content.lines().count() - 5
+                );
             }
             println!("╚══════════════════════════════════════════════════════════════╝");
             print!("> ");
@@ -848,7 +892,7 @@ async fn handle_server_message(state: &Arc<Mutex<ClientState>>, msg: ServerMessa
             println!("╔══════════════════════════════════════════════════════════════╗");
             println!("║                      Version Diff                            ║");
             println!("╚══════════════════════════════════════════════════════════════╝");
-            println!("{}", diff);
+            println!("{diff}");
             print!("> ");
             io::stdout().flush().ok();
         }
@@ -870,7 +914,7 @@ async fn handle_server_message(state: &Arc<Mutex<ClientState>>, msg: ServerMessa
                         e.action
                     );
                     if let Some(ref details) = e.details {
-                        println!("║    └─ {:<54} ║", details);
+                        println!("║    └─ {details:<54} ║");
                     }
                 }
             }
@@ -892,4 +936,3 @@ async fn handle_server_message(state: &Arc<Mutex<ClientState>>, msg: ServerMessa
         }
     }
 }
-
