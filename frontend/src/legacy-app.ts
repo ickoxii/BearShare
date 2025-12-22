@@ -1,0 +1,784 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+// legacy-app.ts
+// Wrapper for original app.js logic
+
+export async function initLegacyApp(): Promise<void> {
+    // === Crypto imports (npm instead of CDN) ===
+
+    let chacha20poly1305: any
+    let x25519: any
+    let sha256: any
+    let hkdf: any
+    let hmac: any
+    let randomBytes: any
+
+    try {
+        console.log('Loading crypto libraries...')
+
+        const [
+            chachaModule,
+            curvesModule,
+            sha256Module,
+            hkdfModule,
+            hmacModule,
+            utilsModule
+        ] = await Promise.all([
+                import('@noble/ciphers/chacha'),
+                import('@noble/curves/ed25519'),
+                import('@noble/hashes/sha256'),
+                import('@noble/hashes/hkdf'),
+                import('@noble/hashes/hmac'),
+                import('@noble/hashes/utils')
+            ])
+
+        chacha20poly1305 = chachaModule
+        x25519 = curvesModule
+        sha256 = sha256Module
+        hkdf = hkdfModule
+        hmac = hmacModule
+        randomBytes = utilsModule
+
+        console.log('Crypto libraries loaded')
+    } catch (err) {
+        console.warn('Crypto load failed', err)
+    }
+
+
+    // BearShare Frontend - Collaborative Editor Client
+
+    try {
+        console.log('Loading crypto libraries...');
+
+        // Import specific submodules
+        const [chachaModule, curvesModule, sha256Module, hkdfModule, hmacModule, utilsModule] = await Promise.all([
+            import('https://cdn.jsdelivr.net/npm/@noble/ciphers@1.0.0/chacha/+esm'),
+            import('https://cdn.jsdelivr.net/npm/@noble/curves@1.6.0/ed25519/+esm'),
+            import('https://cdn.jsdelivr.net/npm/@noble/hashes@1.5.0/sha256/+esm'),
+            import('https://cdn.jsdelivr.net/npm/@noble/hashes@1.5.0/hkdf/+esm'),
+            import('https://cdn.jsdelivr.net/npm/@noble/hashes@1.5.0/hmac/+esm'),
+            import('https://cdn.jsdelivr.net/npm/@noble/hashes@1.5.0/utils/+esm')
+        ]);
+
+        chacha20poly1305 = chachaModule.chacha20poly1305;
+        x25519 = curvesModule.x25519;
+        sha256 = sha256Module.sha256;
+        hkdf = hkdfModule.hkdf;
+        hmac = hmacModule.hmac;
+        randomBytes = utilsModule.randomBytes;
+
+        console.log('Crypto libraries loaded successfully');
+    } catch (e) {
+        console.error('Failed to load crypto libraries:', e);
+        alert('Failed to load crypto libraries: ' + e.message);
+        throw e;
+    }
+
+    // Secure Channel Implementation (X25519 + ChaCha20-Poly1305)
+
+    const VERSION = 1;
+    const HS_MAGIC = new Uint8Array([0x42, 0x53, 0x48, 0x53]); // "BSHS"
+    const REC_MAGIC = new Uint8Array([0x42, 0x53, 0x52, 0x43]); // "BSRC"
+
+    const HS_CLIENT_HELLO = 1;
+    const HS_SERVER_HELLO = 2;
+    const HS_CLIENT_FINISHED = 3;
+    const HS_SERVER_FINISHED = 4;
+    const REC_APPLICATION_DATA = 0x17;
+
+    const HS_HEADER_LEN = 11; // 4 + 2 + 1 + 4
+    const REC_HEADER_LEN = 19; // 4 + 2 + 1 + 8 + 4
+
+    // Secure channel state
+    let secureChannel = null;
+
+    class SecureChannel {
+        constructor(sendKey, recvKey) {
+            this.sendKey = sendKey;
+            this.recvKey = recvKey;
+            this.sendSeq = 0n;
+            this.recvSeq = 0n;
+        }
+
+        encrypt(plaintext) {
+            const seq = this.sendSeq;
+            this.sendSeq++;
+
+            // Build header
+            const header = new Uint8Array(REC_HEADER_LEN);
+            header.set(REC_MAGIC, 0);
+            header[4] = (VERSION >> 8) & 0xff;
+            header[5] = VERSION & 0xff;
+            header[6] = REC_APPLICATION_DATA;
+
+            // Sequence number (big-endian 64-bit)
+            const seqBytes = new Uint8Array(8);
+            let s = seq;
+            for (let i = 7; i >= 0; i--) {
+                seqBytes[i] = Number(s & 0xffn);
+                s >>= 8n;
+            }
+            header.set(seqBytes, 7);
+
+            // Plaintext length (big-endian 32-bit)
+            const len = plaintext.length;
+            header[15] = (len >> 24) & 0xff;
+            header[16] = (len >> 16) & 0xff;
+            header[17] = (len >> 8) & 0xff;
+            header[18] = len & 0xff;
+
+            // Nonce: 4 zero bytes + 8-byte sequence
+            const nonce = new Uint8Array(12);
+            nonce.set(seqBytes, 4);
+
+            // Encrypt with ChaCha20-Poly1305
+            const chacha = chacha20poly1305(this.sendKey, nonce, header);
+            const ciphertext = chacha.encrypt(plaintext);
+
+            // Combine header + ciphertext
+            const frame = new Uint8Array(header.length + ciphertext.length);
+            frame.set(header, 0);
+            frame.set(ciphertext, header.length);
+
+            return frame;
+        }
+
+        decrypt(frame) {
+            if (frame.length < REC_HEADER_LEN + 16) {
+                throw new Error('Record too short');
+            }
+
+            // Verify magic
+            if (!arraysEqual(frame.slice(0, 4), REC_MAGIC)) {
+                throw new Error('Bad record magic');
+            }
+
+            // Verify version
+            const version = (frame[4] << 8) | frame[5];
+            if (version !== VERSION) {
+                throw new Error('Unsupported version: ' + version);
+            }
+
+            // Verify record type
+            if (frame[6] !== REC_APPLICATION_DATA) {
+                throw new Error('Unexpected record type: ' + frame[6]);
+            }
+
+            // Extract sequence number
+            let seq = 0n;
+            for (let i = 7; i < 15; i++) {
+                seq = (seq << 8n) | BigInt(frame[i]);
+            }
+
+            if (seq !== this.recvSeq) {
+                throw new Error(`Unexpected sequence: got ${seq}, expected ${this.recvSeq}`);
+            }
+            this.recvSeq++;
+
+            // Extract plaintext length
+            const plaintextLen = (frame[15] << 24) | (frame[16] << 16) | (frame[17] << 8) | frame[18];
+
+            // Verify total length
+            const expectedLen = REC_HEADER_LEN + plaintextLen + 16; // +16 for tag
+            if (frame.length !== expectedLen) {
+                throw new Error(`Length mismatch: got ${frame.length}, expected ${expectedLen}`);
+            }
+
+            // Extract header and ciphertext
+            const header = frame.slice(0, REC_HEADER_LEN);
+            const ciphertext = frame.slice(REC_HEADER_LEN);
+
+            // Nonce
+            const nonce = new Uint8Array(12);
+            const seqBytes = frame.slice(7, 15);
+            nonce.set(seqBytes, 4);
+
+            // Decrypt
+            const chacha = chacha20poly1305(this.recvKey, nonce, header);
+            return chacha.decrypt(ciphertext);
+        }
+    }
+
+
+    // Cryptographic Helper Functions
+
+    function arraysEqual(a, b) {
+        if (a.length !== b.length) return false;
+        for (let i = 0; i < a.length; i++) {
+            if (a[i] !== b[i]) return false;
+        }
+        return true;
+    }
+
+    function encodeHandshakeFrame(hsType, payload) {
+        const frame = new Uint8Array(HS_HEADER_LEN + payload.length);
+        frame.set(HS_MAGIC, 0);
+        frame[4] = (VERSION >> 8) & 0xff;
+        frame[5] = VERSION & 0xff;
+        frame[6] = hsType;
+        const len = payload.length;
+        frame[7] = (len >> 24) & 0xff;
+        frame[8] = (len >> 16) & 0xff;
+        frame[9] = (len >> 8) & 0xff;
+        frame[10] = len & 0xff;
+        frame.set(payload, HS_HEADER_LEN);
+        return frame;
+    }
+
+    function decodeHandshakeFrame(frame) {
+        if (frame.length < HS_HEADER_LEN) {
+            throw new Error('Handshake frame too short');
+        }
+        if (!arraysEqual(frame.slice(0, 4), HS_MAGIC)) {
+            throw new Error('Bad handshake magic');
+        }
+        const version = (frame[4] << 8) | frame[5];
+        if (version !== VERSION) {
+            throw new Error('Unsupported version: ' + version);
+        }
+        const hsType = frame[6];
+        const payloadLen = (frame[7] << 24) | (frame[8] << 16) | (frame[9] << 8) | frame[10];
+        if (frame.length !== HS_HEADER_LEN + payloadLen) {
+            throw new Error('Payload length mismatch');
+        }
+        return { hsType, payload: frame.slice(HS_HEADER_LEN) };
+    }
+
+    function hkdfExpand(ikm, info, length) {
+        return hkdf(sha256, ikm, undefined, info, length);
+    }
+
+    function hmacSha256(key, data) {
+        return hmac(sha256, key, data);
+    }
+
+    function sha256Hash(data) {
+        return sha256(data);
+    }
+
+    function xorBytes(a, b) {
+        const result = new Uint8Array(a.length);
+        for (let i = 0; i < a.length; i++) {
+            result[i] = a[i] ^ b[i];
+        }
+        return result;
+    }
+
+    function concat(...arrays) {
+        const totalLen = arrays.reduce((sum, arr) => sum + arr.length, 0);
+        const result = new Uint8Array(totalLen);
+        let offset = 0;
+        for (const arr of arrays) {
+            result.set(arr, offset);
+            offset += arr.length;
+        }
+        return result;
+    }
+
+
+    // Handshake Protocol
+    async function performHandshake(ws) {
+        return new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+                reject(new Error('Handshake timeout'));
+            }, 10000);
+
+            let state = 'waiting_server_hello';
+            let clientPrivate, clientPublic;
+            let transcript = new Uint8Array(0);
+            let handshakeKey;
+            let sharedSecret;
+
+            // Generate X25519 keypair
+            clientPrivate = randomBytes(32);
+            clientPublic = x25519.getPublicKey(clientPrivate);
+
+            // Generate random
+            const clientRandom = randomBytes(32);
+
+            // Build ClientHello payload: random (32) + pubkey (32)
+            const chPayload = concat(clientRandom, clientPublic);
+            const chFrame = encodeHandshakeFrame(HS_CLIENT_HELLO, chPayload);
+
+            transcript = concat(transcript, chFrame);
+
+            // Send ClientHello
+            ws.send(chFrame);
+            log('Sent ClientHello', 'info');
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = new Uint8Array(event.data);
+
+                    if (state === 'waiting_server_hello') {
+                        const { hsType, payload } = decodeHandshakeFrame(data);
+
+                        if (hsType !== HS_SERVER_HELLO) {
+                            throw new Error('Expected ServerHello, got ' + hsType);
+                        }
+                        if (payload.length !== 64) {
+                            throw new Error('ServerHello wrong size');
+                        }
+
+                        log('Received ServerHello', 'info');
+
+                        const serverRandom = payload.slice(0, 32);
+                        const serverPublic = payload.slice(32, 64);
+
+                        transcript = concat(transcript, data);
+
+                        // Compute shared secret using X25519
+                        sharedSecret = x25519.getSharedSecret(clientPrivate, serverPublic);
+
+                        // Derive handshake key
+                        handshakeKey = hkdfExpand(sharedSecret, new TextEncoder().encode('bearshare handshake key'), 32);
+
+                        // Compute ClientFinished MAC
+                        const th = sha256Hash(transcript);
+                        const clientFinished = hmacSha256(handshakeKey, th);
+
+                        // Send ClientFinished
+                        const cfFrame = encodeHandshakeFrame(HS_CLIENT_FINISHED, clientFinished);
+                        transcript = concat(transcript, cfFrame);
+                        ws.send(cfFrame);
+                        log('Sent ClientFinished', 'info');
+
+                        state = 'waiting_server_finished';
+
+                    } else if (state === 'waiting_server_finished') {
+                        const { hsType, payload } = decodeHandshakeFrame(data);
+
+                        if (hsType !== HS_SERVER_FINISHED) {
+                            throw new Error('Expected ServerFinished, got ' + hsType);
+                        }
+                        if (payload.length !== 32) {
+                            throw new Error('ServerFinished wrong size');
+                        }
+
+                        // Verify ServerFinished
+                        const th = sha256Hash(transcript);
+                        const expectedMac = hmacSha256(handshakeKey, th);
+                        if (!arraysEqual(payload, expectedMac)) {
+                            throw new Error('ServerFinished verification failed');
+                        }
+
+                        log('Verified ServerFinished', 'info');
+
+                        transcript = concat(transcript, data);
+
+                        // Derive application keys
+                        let c2sKey = hkdfExpand(sharedSecret, new TextEncoder().encode('bearshare app c2s key'), 32);
+                        let s2cKey = hkdfExpand(sharedSecret, new TextEncoder().encode('bearshare app s2c key'), 32);
+
+                        const finalTh = sha256Hash(transcript);
+                        c2sKey = xorBytes(c2sKey, finalTh);
+                        s2cKey = xorBytes(s2cKey, finalTh);
+
+                        // Client sends with c2s, receives with s2c
+                        secureChannel = new SecureChannel(c2sKey, s2cKey);
+
+                        clearTimeout(timeout);
+                        log('Secure channel established!', 'success');
+                        resolve();
+                    }
+                } catch (error) {
+                    clearTimeout(timeout);
+                    reject(error);
+                }
+            };
+        });
+    }
+
+    // Application State
+
+    let ws = null;
+    let currentRoom = null;
+    let siteId = null;
+    let lastContent = '';
+    let isUpdating = false;
+
+    // DOM Elements
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const editor = document.getElementById('editor');
+    const activityLog = document.getElementById('activityLog');
+
+
+    // Connection Management
+
+    async function connect() {
+        const url = document.getElementById('serverUrl').value;
+
+        try {
+            statusText.textContent = 'Connecting...';
+
+            ws = new WebSocket(url);
+            ws.binaryType = 'arraybuffer';
+
+            await new Promise((resolve, reject) => {
+                ws.onopen = resolve;
+                ws.onerror = reject;
+            });
+
+            statusText.textContent = 'Performing handshake...';
+            log('Connected, starting secure handshake...', 'info');
+
+            // Perform secure handshake
+            await performHandshake(ws);
+
+            // Setup message handler for encrypted messages
+            ws.onmessage = (event) => {
+                try {
+                    const data = new Uint8Array(event.data);
+                    const plaintext = secureChannel.decrypt(data);
+                    const json = new TextDecoder().decode(plaintext);
+                    const msg = JSON.parse(json);
+                    handleMessage(msg);
+                } catch (error) {
+                    log('Decrypt error: ' + error.message, 'error');
+                    console.error('Decrypt error:', error);
+                }
+            };
+
+            ws.onclose = () => {
+                statusDot.classList.remove('connected');
+                statusText.textContent = 'Disconnected';
+                document.getElementById('connectionPanel').classList.remove('hidden');
+                document.getElementById('roomPanel').classList.add('hidden');
+                currentRoom = null;
+                secureChannel = null;
+                editor.disabled = true;
+                log('Disconnected from server', 'error');
+            };
+
+            ws.onerror = (error) => {
+                log('Connection error', 'error');
+            };
+
+            statusDot.classList.add('connected');
+            statusText.textContent = 'Connected (Encrypted)';
+            document.getElementById('connectionPanel').classList.add('hidden');
+            document.getElementById('roomPanel').classList.remove('hidden');
+            log('Secure connection established!', 'success');
+
+        } catch (error) {
+            log('Failed to connect: ' + error.message, 'error');
+            console.error('Connection error:', error);
+            statusText.textContent = 'Connection failed';
+        }
+    }
+
+
+    // Message Handling
+
+    function handleMessage(msg) {
+        console.log('Received:', msg);
+
+        switch (msg.type) {
+            case 'RoomCreated':
+                currentRoom = msg.room_id;
+                siteId = msg.site_id;
+                document.getElementById('currentRoomId').value = msg.room_id;
+                document.getElementById('currentSiteId').textContent = msg.site_id;
+                document.getElementById('documentInfo').textContent = msg.filename;
+                document.getElementById('notInRoom').classList.add('hidden');
+                document.getElementById('inRoom').classList.remove('hidden');
+                editor.disabled = false;
+                editor.value = msg.document_content || '';
+                lastContent = editor.value;
+                document.getElementById('syncBtn').disabled = false;
+                document.getElementById('activityBtn').disabled = false;
+                log('Room created: ' + msg.room_id.substring(0, 8), 'success');
+                break;
+
+            case 'JoinedRoom':
+                currentRoom = msg.room_id;
+                siteId = msg.site_id;
+                document.getElementById('currentRoomId').value = msg.room_id;
+                document.getElementById('currentSiteId').textContent = msg.site_id;
+                document.getElementById('documentInfo').textContent = msg.filename;
+                document.getElementById('notInRoom').classList.add('hidden');
+                document.getElementById('inRoom').classList.remove('hidden');
+                editor.disabled = false;
+                editor.value = msg.document_content || '';
+                lastContent = editor.value;
+                document.getElementById('syncBtn').disabled = false;
+                document.getElementById('activityBtn').disabled = false;
+                log('Joined room: ' + msg.room_id.substring(0, 8), 'success');
+                break;
+
+            case 'SyncResponse':
+                isUpdating = true;
+                const cursorPos = editor.selectionStart;
+                editor.value = msg.document_content;
+                lastContent = msg.document_content;
+                // Try to restore cursor position
+                editor.selectionStart = Math.min(cursorPos, editor.value.length);
+                editor.selectionEnd = editor.selectionStart;
+                isUpdating = false;
+                log('Document synced', 'info');
+                break;
+
+            case 'Operation':
+                log(`Remote edit from site ${msg.from_site}`, 'info');
+                break;
+
+            case 'UserJoined':
+                log(`User joined (site ${msg.site_id})`, 'info');
+                break;
+
+            case 'UserLeft':
+                log(`User left (site ${msg.site_id})`, 'info');
+                break;
+
+            case 'VersionSaved':
+                log(`Version ${msg.version.seq} saved`, 'success');
+                break;
+
+            case 'VersionList':
+                displayVersions(msg.versions);
+                break;
+
+            case 'VersionRestored':
+                editor.value = msg.version.content;
+                lastContent = msg.version.content;
+                log(`Restored to version ${msg.version.seq}`, 'success');
+                break;
+
+            case 'ActivityLog':
+                displayActivityLog(msg.events);
+                break;
+
+            case 'Error':
+                log('Error: ' + msg.message, 'error');
+                break;
+
+            case 'Pong':
+                log('Pong received', 'info');
+                break;
+        }
+    }
+
+    // Send encrypted message
+    function send(msg) {
+        if (ws && ws.readyState === WebSocket.OPEN && secureChannel) {
+            const json = JSON.stringify(msg);
+            const plaintext = new TextEncoder().encode(json);
+            const encrypted = secureChannel.encrypt(plaintext);
+            ws.send(encrypted);
+        } else {
+            log('Cannot send: not connected or secure channel not established', 'error');
+        }
+    }
+
+
+    // Room Management
+
+    function createRoom() {
+        const name = document.getElementById('newRoomName').value || 'untitled';
+        const password = document.getElementById('newRoomPassword').value || 'secret';
+        const content = document.getElementById('initialContent').value || '';
+
+        send({
+            type: 'CreateRoom',
+            room_name: name,
+            password: password,
+            filename: name + '.txt',
+            initial_content: content
+        });
+    }
+
+    function joinRoom() {
+        const roomId = document.getElementById('joinRoomId').value;
+        const password = document.getElementById('joinRoomPassword').value || 'secret';
+
+        if (!roomId) {
+            log('Please enter a room ID', 'error');
+            return;
+        }
+
+        send({
+            type: 'JoinRoom',
+            room_id: roomId,
+            password: password
+        });
+    }
+
+    function leaveRoom() {
+        send({ type: 'LeaveRoom' });
+        currentRoom = null;
+        siteId = null;
+        document.getElementById('notInRoom').classList.remove('hidden');
+        document.getElementById('inRoom').classList.add('hidden');
+        editor.value = '';
+        editor.disabled = true;
+        document.getElementById('syncBtn').disabled = true;
+        document.getElementById('activityBtn').disabled = true;
+        document.getElementById('documentInfo').textContent = 'Not in a room';
+        log('Left room', 'info');
+    }
+
+
+    // Document Operations
+
+    function syncDocument() {
+        send({ type: 'RequestSync' });
+    }
+
+
+    // Version Management
+
+    function saveVersion() {
+        const author = prompt('Enter author name (optional):');
+        send({
+            type: 'SaveVersion',
+            author: author || null
+        });
+    }
+
+    function listVersions() {
+        send({ type: 'ListVersions' });
+    }
+
+    function displayVersions(versions) {
+        const container = document.getElementById('versionsList');
+        if (versions.length === 0) {
+            container.innerHTML = '<p style="color: #888; font-size: 0.85rem;">No versions saved yet</p>';
+            return;
+        }
+
+        container.innerHTML = versions.map(v => `
+<div class="version-item" onclick="restoreVersion(${v.seq})">
+<div class="version-id">Version ${v.seq}</div>
+<div class="version-meta">
+${v.author || 'Anonymous'} • ${new Date(v.timestamp).toLocaleString()}
+</div>
+</div>
+`).join('');
+    }
+
+    function restoreVersion(seq) {
+        if (confirm(`Restore to version ${seq}?`)) {
+            send({
+                type: 'RestoreVersion',
+                seq: seq
+            });
+        }
+    }
+
+
+    // Activity Log
+
+    function getActivity() {
+        send({
+            type: 'GetActivityLog',
+            limit: 20
+        });
+    }
+
+    function displayActivityLog(events) {
+        if (events.length === 0) {
+            log('No activity recorded yet', 'info');
+            return;
+        }
+        events.forEach(e => {
+            log(`${e.action}: ${e.details || ''} (${e.user || 'system'})`, 'info');
+        });
+    }
+
+    function log(message, type = 'info') {
+        const entry = document.createElement('div');
+        entry.className = 'log-entry ' + type;
+        entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        activityLog.insertBefore(entry, activityLog.firstChild);
+
+        // Keep only last 50 entries
+        while (activityLog.children.length > 50) {
+            activityLog.removeChild(activityLog.lastChild);
+        }
+    }
+
+
+    // Editor Change Handling
+
+    let changeTimeout = null;
+    editor.addEventListener('input', (e) => {
+        if (isUpdating) return;
+
+        clearTimeout(changeTimeout);
+        changeTimeout = setTimeout(() => {
+            const newContent = editor.value;
+            const oldContent = lastContent;
+
+            // Find the change
+            let start = 0;
+            while (start < oldContent.length && start < newContent.length && oldContent[start] === newContent[start]) {
+                start++;
+            }
+
+            let oldEnd = oldContent.length;
+            let newEnd = newContent.length;
+            while (oldEnd > start && newEnd > start && oldContent[oldEnd - 1] === newContent[newEnd - 1]) {
+                oldEnd--;
+                newEnd--;
+            }
+
+            // Handle deletion
+            if (oldEnd > start) {
+                send({
+                    type: 'Delete',
+                    position: start,
+                    length: oldEnd - start
+                });
+            }
+
+            // Handle insertion
+            if (newEnd > start) {
+                send({
+                    type: 'Insert',
+                    position: start,
+                    text: newContent.substring(start, newEnd)
+                });
+            }
+
+            lastContent = newContent;
+        }, 300); // Debounce 300ms
+    });
+
+    // ============================================================================
+    // Utility Functions
+    // ============================================================================
+
+    function copyRoomId() {
+        const roomIdInput = document.getElementById('currentRoomId');
+        roomIdInput.select();
+        roomIdInput.setSelectionRange(0, 99999); // For mobile
+
+        navigator.clipboard.writeText(roomIdInput.value).then(() => {
+            log('Room ID copied to clipboard!', 'success');
+        }).catch(err => {
+                // Fallback for older browsers
+                document.execCommand('copy');
+                log('Room ID copied to clipboard!', 'success');
+            });
+    }
+
+    // Export Functions to Window
+
+    window.connect = connect;
+    window.createRoom = createRoom;
+    window.joinRoom = joinRoom;
+    window.leaveRoom = leaveRoom;
+    window.saveVersion = saveVersion;
+    window.listVersions = listVersions;
+    window.restoreVersion = restoreVersion;
+    window.syncDocument = syncDocument;
+    window.getActivity = getActivity;
+    window.copyRoomId = copyRoomId;
+
+
+    // Initialization
+
+    log('BearShare initialized. Connect to start!', 'info');
+    console.log('Module fully loaded, functions exported to window');
+}
