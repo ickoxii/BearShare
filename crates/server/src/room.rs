@@ -58,7 +58,7 @@ impl Room {
         let argon2 = Argon2::default();
         let password_hash = argon2
             .hash_password(password.as_bytes(), &salt)
-            .map_err(|e| anyhow!("Failed to hash password: {}", e))?
+            .map_err(|e| anyhow!("Failed to hash password: {e}"))?
             .to_string();
 
         // Create document (site 0 is reserved for server)
@@ -205,7 +205,7 @@ impl Room {
             client
                 .sender
                 .send(message)
-                .map_err(|e| anyhow!("Failed to send message: {}", e))?;
+                .map_err(|e| anyhow!("Failed to send message: {e}"))?;
         }
         Ok(())
     }

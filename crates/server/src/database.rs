@@ -1,8 +1,7 @@
 // Database operations for room management
 
 use anyhow::{Context, Result};
-use sqlx::{AnyPool, Row};
-use uuid::Uuid;
+use sqlx::AnyPool;
 
 // Database manager for room metadata
 #[derive(Clone)]
@@ -271,7 +270,7 @@ mod tests {
 
         let db = Database::new(&db_url).await.unwrap();
 
-        let room_id = Uuid::new_v4().to_string();
+        let room_id = uuid::Uuid::new_v4().to_string();
 
         // Create room
         db.create_room(&room_id, "Test Room", "hash", "test.txt")
@@ -287,7 +286,7 @@ mod tests {
         assert_eq!(room.unwrap().name, "Test Room");
 
         // Add user
-        let user_id = Uuid::new_v4().to_string();
+        let user_id = uuid::Uuid::new_v4().to_string();
         db.add_user(&user_id, &room_id, 1).await.unwrap();
 
         let count = db.get_active_users(&room_id).await.unwrap();

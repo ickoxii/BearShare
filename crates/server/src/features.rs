@@ -1,5 +1,6 @@
 use anyhow::Result;
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     sync::{
@@ -11,7 +12,6 @@ use tokio::{
     sync::{broadcast, RwLock},
     time::{sleep, timeout, Duration},
 };
-use serde::{Deserialize, Serialize};
 
 // Re-export the protocol types for use in server code
 pub use protocol::{ActivityEvent, Version};
@@ -88,7 +88,7 @@ impl VersionStore {
         let b_lines: Vec<&str> = b.content.lines().collect();
 
         let mut out = String::new();
-        out.push_str(&format!("Comparing versions {} -> {}\n", a_seq, b_seq));
+        out.push_str(&format!("Comparing versions {a_seq} -> {b_seq}\n"));
         out.push_str("--- old\n+++ new\n");
 
         // Simple line-by-line comparison (not optimal but deterministic).
@@ -98,13 +98,13 @@ impl VersionStore {
             let lb = b_lines.get(i).copied();
             match (la, lb) {
                 (Some(x), Some(y)) if x == y => {
-                    out.push_str(&format!(" {}\n", x));
+                    out.push_str(&format!(" {x}\n"));
                 }
                 (Some(x), Some(y)) => {
-                    out.push_str(&format!("-{}\n+{}\n", x, y));
+                    out.push_str(&format!("-{x}\n+{y}\n"));
                 }
-                (Some(x), None) => out.push_str(&format!("-{}\n", x)),
-                (None, Some(y)) => out.push_str(&format!("+{}\n", y)),
+                (Some(x), None) => out.push_str(&format!("-{x}\n")),
+                (None, Some(y)) => out.push_str(&format!("+{y}\n")),
                 (None, None) => {}
             }
         }
@@ -131,6 +131,7 @@ pub struct AutoSaver {
 }
 
 impl AutoSaver {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         let (tx, _rx) = broadcast::channel(32);
         Self {
@@ -142,17 +143,19 @@ impl AutoSaver {
     }
 
     // Subscribe to state changes (server -> client UI).
+    #[allow(dead_code)]
     pub fn subscribe_states(&self) -> broadcast::Receiver<AutoSaveState> {
         self.state_tx.subscribe()
     }
 
     // Generic save with timeout, ACK-like wait, and retries with exponential backoff.
     // `save_fn` should attempt to persist/send the version and return Ok(()) when done.
+    #[allow(dead_code)]
     pub async fn save_with_retry<F, Fut>(
         &self,
         version_content: String,
         author: Option<String>,
-        mut save_fn: F,
+        save_fn: F,
     ) -> Result<()>
     where
         F: Fn(String, Option<String>) -> Fut,
@@ -182,10 +185,13 @@ impl AutoSaver {
             }
 
             if attempt >= self.max_retries {
-                tracing::error!("save failed after {} attempts; marking offline pending", attempt);
+                tracing::error!(
+                    "save failed after {} attempts; marking offline pending",
+                    attempt
+                );
                 let _ = self.state_tx.send(AutoSaveState::OfflinePending);
                 // leave it to the caller to persist locally and schedule background retry.
-                return Err(anyhow::anyhow!("save failed after {} attempts", attempt));
+                return Err(anyhow::anyhow!("save failed after {attempt} attempts"));
             }
 
             // backoff and retry
@@ -244,6 +250,7 @@ impl AuditLog {
     }
 
     // Subscribe to a live stream of events (server can forward these to connected WebSocket clients).
+    #[allow(dead_code)]
     pub fn subscribe(&self) -> broadcast::Receiver<ActivityEvent> {
         self.tx.subscribe()
     }
@@ -254,7 +261,14 @@ impl AuditLog {
         let mut v = inner.clone();
         if let Some(l) = limit {
             if v.len() > l {
-                v = v.into_iter().rev().take(l).collect::<Vec<_>>().into_iter().rev().collect();
+                v = v
+                    .into_iter()
+                    .rev()
+                    .take(l)
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect();
             }
         }
         v

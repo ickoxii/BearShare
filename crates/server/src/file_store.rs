@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use uuid::Uuid;
 
 // Stored document state
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,12 +41,12 @@ impl FileStore {
 
     // Get path for a document
     fn document_path(&self, room_id: &str) -> PathBuf {
-        self.root_dir.join(format!("{}.json", room_id))
+        self.root_dir.join(format!("{room_id}.json"))
     }
 
     // Get path for a document's actual content file
     fn content_path(&self, room_id: &str, filename: &str) -> PathBuf {
-        self.root_dir.join(format!("{}_{}", room_id, filename))
+        self.root_dir.join(format!("{room_id}_{filename}"))
     }
 
     // Save document to disk
@@ -157,9 +156,9 @@ impl FileStore {
         Ok(())
     }
 
-    // Clean up old backups 
+    // Clean up old backups
     pub async fn cleanup_backups(&self, room_id: &str, keep: usize) -> Result<()> {
-        let pattern = format!("{}.backup.", room_id);
+        let pattern = format!("{room_id}.backup.");
         let mut backups = Vec::new();
 
         let mut entries = fs::read_dir(&self.root_dir).await?;
@@ -199,7 +198,7 @@ mod tests {
         let store = FileStore::new(temp_dir.path()).await.unwrap();
 
         let doc = StoredDocument {
-            id: Uuid::new_v4().to_string(),
+            id: uuid::Uuid::new_v4().to_string(),
             filename: "test.txt".to_string(),
             room_id: "room1".to_string(),
             content: "Hello World".to_string(),
@@ -226,7 +225,7 @@ mod tests {
         let store = FileStore::new(temp_dir.path()).await.unwrap();
 
         let doc = StoredDocument {
-            id: Uuid::new_v4().to_string(),
+            id: uuid::Uuid::new_v4().to_string(),
             filename: "test.txt".to_string(),
             room_id: "room1".to_string(),
             content: "Hello World".to_string(),
