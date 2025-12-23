@@ -1,19 +1,42 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
+
 teardown() {
     local ENV=local
 
-    # stop the frontend
-    docker compose -f docker/${ENV}/docker-compose.yml down frontend -v
+    local DB=""
+    local SERVER=""
+    local FRONTEND=""
 
-    # stop the server
-    docker compose -f docker/${ENV}/docker-compose.yml down server -v
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            db)
+                DB=db
+                ;;
+            server)
+                SERVER=server
+                ;;
+            frontend)
+                FRONTEND=frontend
+                ;;
+            local)
+                ENV=local
+                ;;
+            prod)
+                ENV=ci
+                ;;
+            *)
+                echo "invalid command: $1"
+                exit 1
+        esac
+        shift
+    done
 
-    # stop the database
-    docker compose -f docker/${ENV}/docker-compose.yml down db -v
+    docker compose -f docker/${ENV}/docker-compose.yml down ${DB} ${SERVER} ${FRONTEND} -v
 }
 
-teardown
+teardown $@
 
 # prune
 docker image prune -af

@@ -1,16 +1,39 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
+
 build() {
-    local ENV=local
+    local ENV="local"
 
-    # start the database
-    docker compose -f docker/${ENV}/docker-compose.yml up db -d --build
+    local DB=""
+    local SERVER=""
+    local FRONTEND=""
 
-    # start the server
-    docker compose -f docker/${ENV}/docker-compose.yml up server -d --build
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            db)
+                DB=db
+                ;;
+            server)
+                SERVER=server
+                ;;
+            frontend)
+                FRONTEND=frontend
+                ;;
+            local)
+                ENV=local
+                ;;
+            prod)
+                ENV=ci
+                ;;
+            *)
+                echo "invalid command: $1"
+                exit 1
+        esac
+        shift
+    done
 
-    # start the frontend
-    docker compose -f docker/${ENV}/docker-compose.yml up frontend -d --build
+    docker compose --parallel 3 -f docker/${ENV}/docker-compose.yml up ${DB} ${SERVER} ${FRONTEND} -d --build
 }
 
-build
+build $@

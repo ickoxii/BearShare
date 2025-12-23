@@ -1,22 +1,22 @@
 {
-  "name": "preact-bearshare",
+  "name": "bearshare",
   "version": "1.0.0",
-  "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "preact": "^10.19.0",
-    "@noble/ciphers": "^1.0.0",
-    "@noble/curves": "^1.6.0",
-    "@noble/hashes": "^1.8.0"
+    "preact": "^10.19.3",
+    "@noble/ciphers": "1.0.0",
+    "@noble/curves": "1.6.0",
+    "@noble/hashes": "1.5.0"
   },
   "devDependencies": {
-    "vite": "^5.0.0",
-    "@preact/preset-vite": "^2.1.0",
-    "typescript": "^5.3.0"
+    "@preact/preset-vite": "^2.8.1",
+    "typescript": "^5.3.3",
+    "vite": "^5.0.11"
   }
 }
