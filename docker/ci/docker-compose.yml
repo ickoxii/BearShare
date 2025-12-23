@@ -29,6 +29,10 @@ services:
     restart: always
     ports:
       - '3000:3000'
+    environment:
+      VITE_WEBSOCKET_URL: ws://localhost:9001/ws
+    networks:
+      - bearshare-network
 
   # BearShare WebSocket Server
   server:

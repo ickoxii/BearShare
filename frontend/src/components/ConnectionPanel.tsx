@@ -1,4 +1,5 @@
 import { useState } from 'preact/hooks';
+const WEBSOCKET_URL: string = import.meta.env.VITE_WEBSOCKET_URL ?? "ws://127.0.0.1:9001/ws";
 
 interface ConnectionPanelProps {
   onConnect: (url: string) => Promise<void>;
@@ -6,7 +7,8 @@ interface ConnectionPanelProps {
 }
 
 export function ConnectionPanel({ onConnect, isConnected }: ConnectionPanelProps) {
-  const [serverUrl, setServerUrl] = useState('ws://localhost:9001/ws');
+  console.log("WEBSOCKET_URL: " + WEBSOCKET_URL);
+  const [serverUrl, setServerUrl] = useState(WEBSOCKET_URL);
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

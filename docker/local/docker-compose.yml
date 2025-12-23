@@ -30,7 +30,7 @@ services:
     ports:
       - '3000:3000'
     environment:
-      VITE_WEBSOCKET_URL: ws://server:9001/ws
+      VITE_WEBSOCKET_URL: ws://localhost:9001/ws
     networks:
       - bearshare-network
 

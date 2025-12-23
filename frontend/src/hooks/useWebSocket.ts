@@ -50,6 +50,8 @@ export function useWebSocket(): UseWebSocketResult {
         setSiteId(message.site_id);
         setDocumentContent(message.document_content);
         addLog({ timestamp: new Date(), message: `Joined room: ${message.room_id}`, type: 'success' });
+        wsService.send({type: 'RequestSync'});
+        addLog({timestamp: new Date(), message: 'Requesting document sync...', type: 'info'});
         break;
 
       case 'SyncResponse':
