@@ -229,7 +229,7 @@ export function performHandshake(ws: WebSocket): Promise<SecureChannel> {
     const chPayload = concat(clientRandom, clientPublic);
     const chFrame = encodeHandshakeFrame(HS_CLIENT_HELLO, chPayload);
 
-    transcript = concat(transcript, chFrame);
+    transcript = new Uint8Array(concat(transcript, chFrame));
 
     // Send ClientHello
     ws.send(chFrame);
@@ -250,10 +250,10 @@ export function performHandshake(ws: WebSocket): Promise<SecureChannel> {
             throw new Error('Invalid ServerHello payload length');
           }
 
-          const serverRandom = payload.slice(0, 32);
+          // const serverRandom = payload.slice(0, 32);
           const serverPublic = payload.slice(32, 64);
 
-          transcript = concat(transcript, data);
+          transcript = new Uint8Array(concat(transcript, data));
 
           // Compute ECDH shared secret
           sharedSecret = x25519.getSharedSecret(clientPrivate, serverPublic);
@@ -267,7 +267,7 @@ export function performHandshake(ws: WebSocket): Promise<SecureChannel> {
 
           // Send ClientFinished
           const cfFrame = encodeHandshakeFrame(HS_CLIENT_FINISHED, clientFinished);
-          transcript = concat(transcript, cfFrame);
+          transcript = new Uint8Array(concat(transcript, cfFrame));
           ws.send(cfFrame);
 
           console.log('Sent ClientFinished');
@@ -295,7 +295,7 @@ export function performHandshake(ws: WebSocket): Promise<SecureChannel> {
 
           console.log('Verified ServerFinished');
 
-          transcript = concat(transcript, data);
+          transcript = new Uint8Array(concat(transcript, data));
 
           // Derive application keys
           let c2sKey = hkdfExpand(sharedSecret, new TextEncoder().encode('bearshare app c2s key'), 32);

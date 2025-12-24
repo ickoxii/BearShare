@@ -10,7 +10,7 @@ on:
       - '.github/workflows/test-frontend.yml'
 
 jobs:
-  test-crates:
+  test-frontend:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
