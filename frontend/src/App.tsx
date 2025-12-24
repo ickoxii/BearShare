@@ -17,7 +17,6 @@ export function App() {
     versions,
     activityLog,
     connect,
-    disconnect,
     createRoom,
     joinRoom,
     leaveRoom,
@@ -28,7 +27,6 @@ export function App() {
     listVersions,
     restoreVersion,
     getActivity,
-    setDocumentContent,
   } = useWebSocket();
 
   const { handleChange } = useEditorChanges({
@@ -43,7 +41,7 @@ export function App() {
   return (
     <div className="container">
       <header>
-        <h1>🐻 BearShare</h1>
+        <h1>BearShare</h1>
         <p>Real-time Collaborative Editor</p>
       </header>
 

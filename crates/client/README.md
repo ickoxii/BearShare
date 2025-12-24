@@ -32,7 +32,7 @@ SERVER_URL="ws://your-server:9001/ws" cargo run -p client
 ## Commands
 
 | Command | Shortcut | Description |
-|---------|----------|-------------|
+| --- | --- | --- |
 | `create <name> <password> [content]` | `c` | Create a new room |
 | `join <room_id> <password>` | `j` | Join an existing room |
 | `leave` | `l` | Leave the current room |
@@ -47,7 +47,7 @@ SERVER_URL="ws://your-server:9001/ws" cargo run -p client
 
 ## Example Session
 
-```
+```sh
 > create myroom secret123 Hello World
 [info] Creating room 'myroom'...
 

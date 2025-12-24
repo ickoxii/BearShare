@@ -1,27 +1,22 @@
-name: Rust Test
+name: Test Crates
 
 on:
   push:
     branches: [ "main" ]
-    paths:
-      - 'crates/**'
-      - 'docker/**'
-      - '.github/workflows/rust.yml'
   pull_request:
     branches: [ "main" ]
     paths:
+      - 'Cargo.toml'
       - 'crates/**'
-      - 'docker/**'
-      - '.github/workflows/rust.yml'
+      - 'rust-toolchaim.toml'
+      - '.github/workflows/test-backend.yml'
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  test:
-
+  test-crates:
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v4
     - name: Build

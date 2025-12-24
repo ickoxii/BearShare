@@ -30,7 +30,7 @@ export function ConnectionPanel({ onConnect, isConnected }: ConnectionPanelProps
 
   return (
     <div className="panel">
-      <h2>🔌 Connect</h2>
+      <h2>Connect</h2>
       <div className="form-group">
         <label>Server URL</label>
         <input

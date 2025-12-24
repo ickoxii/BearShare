@@ -37,7 +37,7 @@ export function Editor({ content, onChange, disabled, roomId, onSync, onGetActiv
   return (
     <div className="editor-panel">
       <div className="editor-header">
-        <h2>📝 Document</h2>
+        <h2>Document</h2>
         <span className="room-info">
           {roomId ? `Room: ${roomId.substring(0, 8)}...` : 'Not in a room'}
         </span>
@@ -58,14 +58,14 @@ export function Editor({ content, onChange, disabled, roomId, onSync, onGetActiv
           onClick={onSync}
           disabled={disabled}
         >
-          🔄 Sync
+          Sync
         </button>
         <button
           className="btn btn-secondary"
           onClick={onGetActivity}
           disabled={disabled}
         >
-          📊 Activity
+          Activity
         </button>
       </div>
     </div>

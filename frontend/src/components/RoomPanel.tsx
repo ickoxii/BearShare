@@ -63,7 +63,7 @@ export function RoomPanel({
 
   return (
     <div className="panel">
-      <h2>🔒 Room</h2>
+      <h2>Room</h2>
 
       {!roomId ? (
         <>
@@ -139,7 +139,6 @@ export function RoomPanel({
                   onClick={copyRoomId}
                   title="Copy Room ID"
                 >
-                  📋
                 </button>
               </div>
             </div>
@@ -152,7 +151,7 @@ export function RoomPanel({
           </button>
 
           <div className="version-section">
-            <h3 className="section-title">📜 Versions</h3>
+            <h3 className="section-title">Versions</h3>
             <button className="btn btn-secondary" onClick={handleSaveVersion}>
               Save Version
             </button>
