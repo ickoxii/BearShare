@@ -7,7 +7,7 @@ interface ActivityLogProps {
 export function ActivityLog({ entries }: ActivityLogProps) {
   return (
     <div className="activity-log-container">
-      <h3>📋 Activity Log</h3>
+      <h3>Activity Log</h3>
       <div className="activity-log">
         {entries.map((entry, index) => (
           <div key={index} className={`log-entry ${entry.type}`}>
