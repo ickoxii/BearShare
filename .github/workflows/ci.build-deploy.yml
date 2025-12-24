@@ -3,11 +3,15 @@ name: Build & Deploy
 on:
   push:
     branches:
-      - awoeijf
+      - main
+    paths:
+      - 'crates/**'
+      - 'docker/**'
+      - '.github/workflows/ci.build-deploy.yml'
 
 jobs:
   build-and-deploy:
-    runs-on: [self-hosted, prod]
+    runs-on: [self-hosted]
     steps:
       - uses: actions/checkout@v3
 
