@@ -1,0 +1,25 @@
+name: Test Misc
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  misc-checks:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install markdownlint
+        run: npm install -g markdownlint-cli
+
+      - name: Link Markdown files
+        run: markdownlint "**/*.md"

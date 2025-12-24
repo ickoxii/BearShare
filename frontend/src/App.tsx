@@ -17,7 +17,6 @@ export function App() {
     versions,
     activityLog,
     connect,
-    disconnect,
     createRoom,
     joinRoom,
     leaveRoom,
@@ -28,7 +27,6 @@ export function App() {
     listVersions,
     restoreVersion,
     getActivity,
-    setDocumentContent,
   } = useWebSocket();
 
   const { handleChange } = useEditorChanges({
