@@ -7,17 +7,21 @@ RUN npm install
 COPY frontend .
 # TODO: compliance with run build
 # RUN npm run build
-RUN npm run dev
-
-FROM node:20
-
-WORKDIR /app
-
-# Copy only what is needed to run preview
-COPY --from=build /build/package*.json ./
-COPY --from=build /build/node_modules ./node_modules
-COPY --from=build /build/dist ./dist
 
 EXPOSE 3000
 
-CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "3000"]
+ENTRYPOINT ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "3000"]
+
+# TODO: two-stage build
+# FROM node:20
+#
+# WORKDIR /app
+#
+# # Copy only what is needed to run preview
+# COPY --from=build /build/package*.json ./
+# COPY --from=build /build/node_modules ./node_modules
+# COPY --from=build /build/dist ./dist
+#
+# EXPOSE 3000
+#
+# CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "3000"]
