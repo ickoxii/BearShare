@@ -5,3 +5,4 @@
 - [ ] join by room name or something
 - [ ] tree-sitter
 - [ ] different pages for connect vs in room
+- [ ] p2p?
