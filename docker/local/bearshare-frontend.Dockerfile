@@ -1,10 +1,13 @@
 # Create a build of the project
 FROM node:20 AS build
 WORKDIR /build
-COPY frontend .
+COPY frontend/package.json .
+COPY frontend/yarn.lock .
+RUN yarn install
 
-RUN npm install
+COPY frontend/ .
+RUN yarn run build
 
 EXPOSE 3000
 
-ENTRYPOINT ["npm", "run", "dev", "--", "--host"]
+ENTRYPOINT ["yarn", "run", "dev", "--", "--host"]

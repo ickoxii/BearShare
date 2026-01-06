@@ -4,7 +4,7 @@ BearShare is a collaborative text editor that uses Replicated Growable Arrays (R
 
 ## Running the Project
 
-Dependencies: `docker`, `npm`
+Dependencies: `docker`, `npm`+`yarn`
 
 <details>
   <summary>Full Containerization</summary>
