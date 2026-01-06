@@ -6,6 +6,7 @@ interface UseWebSocketResult {
   connectionStatus: ConnectionStatus;
   roomId: string | null;
   siteId: number | null;
+  filename: string | null;
   documentContent: string;
   versions: Version[];
   activityLog: LogEntry[];
@@ -29,6 +30,7 @@ export function useWebSocket(): UseWebSocketResult {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('disconnected');
   const [roomId, setRoomId] = useState<string | null>(null);
   const [siteId, setSiteId] = useState<number | null>(null);
+  const [filename, setFilename] = useState<string | null>(null);
   const [documentContent, setDocumentContent] = useState<string>('');
   const [versions, setVersions] = useState<Version[]>([]);
   const [activityLog, setActivityLog] = useState<LogEntry[]>([]);
@@ -48,10 +50,11 @@ export function useWebSocket(): UseWebSocketResult {
       case 'JoinedRoom':
         setRoomId(message.room_id);
         setSiteId(message.site_id);
+        setFilename(message.filename);
         setDocumentContent(message.document_content);
         addLog({ timestamp: new Date(), message: `Joined room: ${message.room_id}`, type: 'success' });
-        wsService.send({type: 'RequestSync'});
-        addLog({timestamp: new Date(), message: 'Requesting document sync...', type: 'info'});
+        wsService.send({ type: 'RequestSync' });
+        addLog({ timestamp: new Date(), message: 'Requesting document sync...', type: 'info' });
         break;
 
       case 'SyncResponse':
@@ -102,7 +105,7 @@ export function useWebSocket(): UseWebSocketResult {
         addLog({ timestamp: new Date(), message: 'Pong received', type: 'info' });
         break;
     }
-  }, [addLog]);
+  }, [addLog, wsService]);
 
   useEffect(() => {
     wsService.setMessageHandler(handleMessage);
@@ -125,15 +128,18 @@ export function useWebSocket(): UseWebSocketResult {
     setConnectionStatus('disconnected');
     setRoomId(null);
     setSiteId(null);
+    setFilename(null);
     setDocumentContent('');
   }, [wsService]);
 
   const createRoom = useCallback((name: string, password: string, initialContent: string) => {
+    const fname = name.endsWith('.txt') ? name : name + '.txt';
+    setFilename(fname);
     wsService.send({
       type: 'CreateRoom',
       room_name: name,
       password: password,
-      filename: name + '.txt',
+      filename: fname,
       initial_content: initialContent,
     });
   }, [wsService]);
@@ -150,6 +156,7 @@ export function useWebSocket(): UseWebSocketResult {
     wsService.send({ type: 'LeaveRoom' });
     setRoomId(null);
     setSiteId(null);
+    setFilename(null);
     setDocumentContent('');
     addLog({ timestamp: new Date(), message: 'Left room', type: 'info' });
   }, [wsService, addLog]);
@@ -203,6 +210,7 @@ export function useWebSocket(): UseWebSocketResult {
     connectionStatus,
     roomId,
     siteId,
+    filename,
     documentContent,
     versions,
     activityLog,

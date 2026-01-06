@@ -1,5 +1,7 @@
-// Message Types for WebSocket Communication
+// Page Types for Router
+export type Page = 'connect' | 'menu' | 'create-room' | 'join-room' | 'editor';
 
+// Message Types for WebSocket Communication
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 
 export interface Version {
@@ -17,7 +19,6 @@ export interface ActivityEvent {
 }
 
 // WebSocket Message Types
-
 export type ServerMessage =
   | { type: 'RoomCreated'; room_id: string; site_id: number }
   | { type: 'JoinedRoom'; room_id: string; site_id: number; document_content: string; filename: string }
@@ -46,11 +47,11 @@ export type ClientMessage =
   | { type: 'Ping' };
 
 // Application State
-
 export interface RoomState {
   roomId: string | null;
   siteId: number | null;
   documentContent: string;
+  filename: string | null;
 }
 
 export interface LogEntry {

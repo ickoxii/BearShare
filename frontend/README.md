@@ -12,6 +12,7 @@ A real-time collaborative text editor with end-to-end encryption, built with Typ
 - **Version Control**: Save and restore document versions
 - **Activity Logging**: Track all document activities
 - **Secure WebSocket**: Custom handshake protocol with encrypted channels
+- **Multi-Page UI**: Clean, focused pages for each task
 
 ---
 
@@ -32,15 +33,16 @@ A real-time collaborative text editor with end-to-end encryption, built with Typ
 ```sh
 bearshare/
 ├── src/
-│   ├── components/          # React components
-│   │   ├── ActivityLog.tsx  # Activity log display
-│   │   ├── ConnectionPanel.tsx  # WebSocket connection UI
-│   │   ├── Editor.tsx       # Main text editor
-│   │   ├── RoomPanel.tsx    # Room management UI
-│   │   ├── StatusBar.tsx    # Connection status indicator
-│   │   └── VersionList.tsx  # Version history display
+│   ├── pages/               # Page components
+│   │   ├── ConnectPage.tsx  # Server connection page
+│   │   ├── MenuPage.tsx     # Create/Join room selection
+│   │   ├── CreateRoomPage.tsx  # Room creation form
+│   │   ├── JoinRoomPage.tsx    # Room joining form
+│   │   ├── EditorPage.tsx      # Main editor with activity log
+│   │   └── index.ts            # Page exports
 │   ├── hooks/               # Custom React hooks
-│   │   ├── useEditorChanges.ts  # Editor change detection with debouncing
+│   │   ├── useRouter.ts         # Simple page router
+│   │   ├── useEditorChanges.ts  # Editor change detection
 │   │   └── useWebSocket.ts      # WebSocket connection management
 │   ├── services/            # Core services
 │   │   ├── crypto.ts        # Encryption and handshake protocol
@@ -49,7 +51,7 @@ bearshare/
 │   │   └── app.css          # Main stylesheet
 │   ├── types/               # TypeScript type definitions
 │   │   └── index.ts         # All type interfaces
-│   ├── App.tsx              # Main app component
+│   ├── App.tsx              # Main app component with routing
 │   └── main.tsx             # Application entry point
 ├── index.html               # HTML entry point
 ├── package.json             # Dependencies and scripts
@@ -63,20 +65,30 @@ bearshare/
 
 ```bash
 # Install dependencies
-npm install
+yarn install
 
 # Start development server
-npm run dev
+yarn run dev
 
 # Build for production
-npm run build
+yarn run build
 
 # Preview production build
-npm run preview
+yarn run preview
 
 # Type check without building
-npm run type-check
+yarn run type-check
 ```
+
+---
+
+## Page Flow
+
+1. **Connect Page**: Enter server IP and port, click connect
+2. **Menu Page**: Choose to create or join a room
+3. **Create Room Page**: Enter room name and password
+4. **Join Room Page**: Enter room ID and password
+5. **Editor Page**: Edit document with real-time sync and activity log
 
 ---
 
@@ -86,8 +98,9 @@ The application will be available at `http://localhost:3000` when running the de
 
 ### Key Components
 
-- **App.tsx**: Main application component that orchestrates all features
-- **useWebSocket**: Custom hook managing WebSocket connection, encryption, and message handling
+- **App.tsx**: Main application component with page routing
+- **useRouter**: Simple page navigation hook
+- **useWebSocket**: WebSocket connection, encryption, and message handling
 - **useEditorChanges**: Handles editor change detection and debouncing
 - **SecureChannel**: Implements the encrypted communication channel
 - **performHandshake**: Executes the X25519 + ChaCha20-Poly1305 handshake
@@ -96,49 +109,10 @@ The application will be available at `http://localhost:3000` when running the de
 
 All components, hooks, and services are fully typed with TypeScript:
 
+- `Page` type for router navigation
 - `ServerMessage` and `ClientMessage` types for WebSocket messages
 - `ConnectionStatus`, `RoomState`, `LogEntry` for application state
 - Proper type inference throughout the application
-
-### State Management
-
-State is managed through:
-
-- `useWebSocket` hook for global connection state
-- Local component state with `useState`
-- Props drilling for component communication (can be upgraded to Context if needed)
-
----
-
-## Architecture Highlights
-
-### Idiomatic TypeScript
-
-- Strict type checking enabled
-- No `any` types used
-- Proper interface definitions for all data structures
-- Type-safe message handling
-
-### Modern React/Preact Patterns
-
-- Functional components with hooks
-- Custom hooks for reusable logic
-- Proper dependency arrays in `useEffect` and `useCallback`
-- Ref usage for DOM manipulation when necessary
-
-### Clean Separation of Concerns
-
-- **Components**: Pure UI, minimal logic
-- **Hooks**: Reusable stateful logic
-- **Services**: Business logic and external communication
-- **Types**: Centralized type definitions
-
-### Performance Optimizations
-
-- Debounced editor changes (300ms)
-- `useCallback` for stable function references
-- Proper cleanup in `useEffect` hooks
-- Minimal re-renders through careful state design
 
 ---
 
@@ -163,20 +137,8 @@ The application uses a custom secure protocol:
 
 ### Server → Client
 
-- `RoomCreated`, `RoomJoined`
+- `RoomCreated`, `JoinedRoom`
 - `SyncResponse`, `Operation`
 - `UserJoined`, `UserLeft`
 - `VersionSaved`, `VersionList`, `VersionRestored`
 - `ActivityLog`, `Error`, `Pong`
-
----
-
-## Contributing
-
-This is a complete rewrite focusing on:
-
-- TypeScript best practices
-- Modern React/Preact patterns
-- Clean architecture
-- Type safety
-- Maintainability

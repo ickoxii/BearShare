@@ -1,22 +1,22 @@
 import { useWebSocket } from './hooks/useWebSocket';
 import { useEditorChanges } from './hooks/useEditorChanges';
-import { StatusBar } from './components/StatusBar';
-import { ConnectionPanel } from './components/ConnectionPanel';
-import { RoomPanel } from './components/RoomPanel';
-import { ActivityLog } from './components/ActivityLog';
-import { Editor } from './components/Editor';
-import { VersionList } from './components/VersionList';
+import { useRouter } from './hooks/useRouter';
+import { ConnectPage, MenuPage, CreateRoomPage, JoinRoomPage, EditorPage } from './pages';
 import './styles/app.css';
 
 export function App() {
+  const { currentPage, navigate } = useRouter('connect');
+  
   const {
     connectionStatus,
     roomId,
     siteId,
+    filename,
     documentContent,
     versions,
     activityLog,
     connect,
+    disconnect,
     createRoom,
     joinRoom,
     leaveRoom,
@@ -35,49 +35,82 @@ export function App() {
     onDelete: sendDelete,
   });
 
-  const isConnected = connectionStatus === 'connected';
-  const inRoom = roomId !== null;
+  const handleDisconnect = () => {
+    disconnect();
+    navigate('connect');
+  };
 
-  return (
-    <div className="container">
-      <header>
-        <h1>BearShare</h1>
-        <p>Real-time Collaborative Editor</p>
-      </header>
+  const handleLeaveRoom = () => {
+    leaveRoom();
+    navigate('menu');
+  };
 
-      <StatusBar status={connectionStatus} siteId={siteId} />
+  const renderPage = () => {
+    switch (currentPage) {
+      case 'connect':
+        return (
+          <ConnectPage
+            onConnect={connect}
+            onSuccess={() => navigate('menu')}
+          />
+        );
 
-      <div className="main-content">
-        <div className="sidebar">
-          <ConnectionPanel onConnect={connect} isConnected={isConnected} />
+      case 'menu':
+        return (
+          <MenuPage
+            onCreateRoom={() => navigate('create-room')}
+            onJoinRoom={() => navigate('join-room')}
+            onDisconnect={handleDisconnect}
+          />
+        );
 
-          <RoomPanel
-            isConnected={isConnected}
+      case 'create-room':
+        return (
+          <CreateRoomPage
+            onCreate={createRoom}
+            onBack={() => navigate('menu')}
+            onRoomCreated={() => navigate('editor')}
+            roomId={roomId}
+          />
+        );
+
+      case 'join-room':
+        return (
+          <JoinRoomPage
+            onJoin={joinRoom}
+            onBack={() => navigate('menu')}
+            onRoomJoined={() => navigate('editor')}
+            roomId={roomId}
+          />
+        );
+
+      case 'editor':
+        return (
+          <EditorPage
+            content={documentContent}
+            filename={filename}
             roomId={roomId}
             siteId={siteId}
-            onCreateRoom={createRoom}
-            onJoinRoom={joinRoom}
-            onLeaveRoom={leaveRoom}
+            activityLog={activityLog}
+            versions={versions}
+            onChange={handleChange}
+            onSync={syncDocument}
+            onLeaveRoom={handleLeaveRoom}
             onSaveVersion={saveVersion}
             onListVersions={listVersions}
+            onRestoreVersion={restoreVersion}
+            onGetActivity={getActivity}
           />
+        );
 
-          {versions.length > 0 && (
-            <VersionList versions={versions} onRestore={restoreVersion} />
-          )}
+      default:
+        return null;
+    }
+  };
 
-          <ActivityLog entries={activityLog} />
-        </div>
-
-        <Editor
-          content={documentContent}
-          onChange={handleChange}
-          disabled={!inRoom}
-          roomId={roomId}
-          onSync={syncDocument}
-          onGetActivity={getActivity}
-        />
-      </div>
+  return (
+    <div className="app">
+      {renderPage()}
     </div>
   );
 }
