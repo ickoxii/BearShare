@@ -6,7 +6,7 @@ import './styles/app.css';
 
 export function App() {
   const { currentPage, navigate } = useRouter('connect');
-  
+
   const {
     connectionStatus,
     roomId,

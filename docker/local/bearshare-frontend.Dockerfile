@@ -6,7 +6,6 @@ COPY frontend/yarn.lock .
 RUN yarn install
 
 COPY frontend/ .
-RUN yarn run build
 
 EXPOSE 3000
 

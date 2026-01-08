@@ -133,7 +133,7 @@ export function useWebSocket(): UseWebSocketResult {
   }, [wsService]);
 
   const createRoom = useCallback((name: string, password: string, initialContent: string) => {
-    const fname = name.endsWith('.txt') ? name : name + '.txt';
+    const fname = name;
     setFilename(fname);
     wsService.send({
       type: 'CreateRoom',
